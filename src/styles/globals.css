@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ambient-bg: #f4efe9;
+  --ambient-bg-alt: #eae3da;
+  --ambient-surface: rgb(255 252 247 / 0.72);
+  --ambient-fg: #1f1b17;
+  --ambient-muted: #6b645c;
+  --ambient-edge: #d9d2c8;
+  --ambient-accent: #7a6244;
+  --ambient-accent-soft: #9a805f;
+  --ambient-pulse-ms: 1200ms;
+  --ambient-energy: 0.5;
+  --ambient-valence: 0.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgb(255 252 247 / 0.82), transparent 34rem),
+    linear-gradient(135deg, var(--ambient-bg), var(--ambient-bg-alt));
+  color: var(--ambient-fg);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: transparent;
+  color: var(--ambient-fg);
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+::selection {
+  background: var(--ambient-accent-soft);
+  color: var(--ambient-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}

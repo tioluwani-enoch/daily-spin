@@ -1,0 +1,9 @@
+export const CORE_N = 30;
+export const RECENT_M = 10;
+export const DRIFT_THRESHOLD_DRIFTING = 0.15;
+export const DRIFT_THRESHOLD_OUTLIER = 0.3;
+export const STALE_DAYS_NO_EDIT = 60;
+export const STALE_DAYS_NO_PLAY = 30;
+export const DYING_DAYS_NO_PLAY = 90;
+export const DYING_DAYS_NO_EDIT = 90;
+export const MIN_TRACKS_FOR_FINGERPRINT = 5;
