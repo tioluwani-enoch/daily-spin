@@ -1,4 +1,10 @@
-# Daily Spin
+<p align="center">
+  <img src="public/logo.svg" alt="Daily Spin logo" width="96" height="96" />
+</p>
+
+<h1 align="center">Daily Spin</h1>
+
+<p align="center"><strong>LOVE IT AGAIN</strong></p>
 
 A quiet daily companion for people who actively care about the music they listen to.
 
@@ -8,16 +14,27 @@ No social feed. No streaks. No generic discovery firehose. Just a small, careful
 
 ## What It Does
 
-- Surfaces one ignored saved track every morning.
+- Surfaces a daily recommendation from your synced Spotify library.
+- Lets you randomize the daily pick when your library is large.
+- Plays tracks inside the app with a mini player, expanded player, and shuffled queue.
 - Shows recent releases from your personal artist watchlist.
+- Suggests watchlist artists from your saved tracks.
 - Saves song recommendations into a capture inbox for later triage.
 - Monitors playlists for drift, staleness, and abandonment.
 - Suggests small playlist repairs using audio-feature fingerprints.
 - Leaves room for Spin Companion, a Claude-powered chat layer grounded only in your music data.
 
+## Brand
+
+Daily Spin is built around a simple promise: **love it again**.
+
+The app is not trying to replace Spotify. It sits above your library and helps you return to music you already care about, notice releases from artists you choose, and keep playlists feeling intentional.
+
+The logo combines a small daily ritual mark with a spinning record: quiet, circular, and personal.
+
 ## Current Status
 
-Daily Spin is in early implementation.
+Daily Spin is in active local implementation.
 
 Working now:
 
@@ -25,17 +42,22 @@ Working now:
 - Tailwind design system with ambient CSS variables.
 - Supabase schema migration for the v1 data model.
 - Feature-module structure from the docs.
-- Demo-data dashboard at `/`.
+- Spotify OAuth with playback scopes.
+- Spotify library backfill into Supabase.
+- Saved tracks, recent plays, playlists, watchlist artists, and release sync.
+- In-app Spotify Web Playback SDK player.
+- Daily pick generation and randomization.
+- Artist watchlist manager on `/setup`.
 - Playlist health overview and curation screen.
 - Capture inbox UI and basic capture route.
 - Morning Pick scoring algorithm with tests.
 
-Not wired yet:
+Still evolving:
 
-- Real Spotify OAuth and sync jobs.
-- Real Supabase session-backed reads and writes.
 - Claude/Spin Companion runtime calls.
-- Production backfill, cron processing, and playlist mutations.
+- Production-grade recurring sync scheduling.
+- Playlist mutation actions.
+- Deeper recommendation explanations.
 
 The full product spec lives in [`docs/`](docs/). Start with [`docs/index.md`](docs/index.md).
 
@@ -60,10 +82,10 @@ pnpm install
 Create a local env file:
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-Until Spotify sync is wired, the app shows empty setup states instead of fake listening data.
+Fill in Spotify, Supabase, NextAuth, and optional Anthropic values in `.env`.
 
 Start the dev server:
 
@@ -74,7 +96,13 @@ pnpm dev
 Open:
 
 ```text
-http://localhost:3000
+http://127.0.0.1:3000
+```
+
+Use the same host in your Spotify redirect URI:
+
+```text
+http://127.0.0.1:3000/api/auth/callback/spotify
 ```
 
 ## Scripts
@@ -109,6 +137,7 @@ The module boundary rule is important: modules do not import from each other. Sh
 ## Core Screens
 
 - `/` - Morning ritual: pick, releases, capture inbox, playlist attention.
+- `/setup` - Spotify connection, backfill, artist watchlist, and saved-track preview.
 - `/playlists` - Playlist health overview.
 - `/playlists/[playlistId]` - Curation view with fingerprint and suggestions.
 - `/recap` - Weekly recap placeholder.

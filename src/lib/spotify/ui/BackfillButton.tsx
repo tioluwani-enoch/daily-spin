@@ -11,6 +11,7 @@ type BackfillResult = {
   playlists: number;
   playlistTracks: number;
   skippedPlaylists: number;
+  watchlistReleases?: number;
   audioFeatures: {
     requested: number;
     stored: number;
@@ -43,6 +44,8 @@ export function BackfillButton() {
     setStatus("done");
     setMessage(
       `Synced ${result.savedTracks} saved tracks, ${result.playlists} playlists, ${result.playlistTracks} playlist tracks, and ${result.listeningHistory} recent plays. ${
+        typeof result.watchlistReleases === "number" ? `Found ${result.watchlistReleases} watchlist releases. ` : ""
+      }${
         result.skippedPlaylists > 0 ? `Skipped ${result.skippedPlaylists} inaccessible playlists. ` : ""
       }${
         result.audioFeatures.unavailable

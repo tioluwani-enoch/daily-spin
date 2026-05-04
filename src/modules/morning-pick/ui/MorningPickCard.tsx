@@ -31,7 +31,7 @@ export function MorningPickCard({ pick }: { pick: MorningPick | null }) {
           </div>
           <h2 className="mt-3 text-h1 text-ambient-fg">{pick.trackName ?? "Track metadata is syncing."}</h2>
           <p className="truncate font-mono text-mono-sm text-ambient-muted">{pick.artists.length > 0 ? pick.artists.join(", ") : pick.trackId}</p>
-          <p className="mt-4 text-body text-ambient-fg">{pick.reason}</p>
+          <p className="mt-4 text-body text-ambient-fg">{formatPickReason(pick.reason)}</p>
           <div className="mt-6 flex flex-wrap gap-2">
             <MorningPickPlayButton pick={pick} />
             <a
@@ -47,7 +47,7 @@ export function MorningPickCard({ pick }: { pick: MorningPick | null }) {
               <input type="hidden" name="pickId" value={pick.id} />
               <Button type="submit" variant="ghost">
                 <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
-                Dismiss
+                Randomize
               </Button>
             </form>
           </div>
@@ -55,4 +55,12 @@ export function MorningPickCard({ pick }: { pick: MorningPick | null }) {
       </div>
     </Card>
   );
+}
+
+function formatPickReason(reason: string): string {
+  if (reason.startsWith("You saved this track")) {
+    return "Daily Spin is still learning your listening patterns, so this is a recommendation to try today. As more Spotify history syncs, these picks will get more personal.";
+  }
+
+  return reason;
 }

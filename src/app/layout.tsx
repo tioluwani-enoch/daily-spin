@@ -3,8 +3,10 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 
 import { AuthProvider } from "@/lib/auth/ui/AuthProvider";
+import { DailySpinLogo } from "@/lib/brand/DailySpinLogo";
 import { AutoBackfillRunner } from "@/lib/spotify/ui/AutoBackfillRunner";
 import { SpotifyWebPlayer } from "@/lib/spotify/player/SpotifyWebPlayer";
+import { FullscreenToggle } from "@/lib/ui";
 
 import "@/styles/globals.css";
 
@@ -13,7 +15,11 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Daily Spin",
-  description: "A daily companion for people who actually care about the music they listen to."
+  description: "A daily companion for people who actually care about the music they listen to.",
+  icons: {
+    icon: "/logo.svg",
+    apple: "/logo.svg"
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -23,9 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <div className="mx-auto flex min-h-screen w-full max-w-[840px] flex-col px-5 py-6 sm:px-8 sm:py-10">
             <header className="mb-12 flex items-center justify-between gap-4">
-              <Link className="text-h2 text-ambient-fg" href="/">
-                Daily Spin
-              </Link>
+              <DailySpinLogo />
               <nav className="flex items-center gap-4 font-mono text-mono-sm text-ambient-muted">
                 <Link className="transition hover:text-ambient-accent" href="/playlists">
                   Playlists
@@ -39,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </nav>
             </header>
             <main className="flex-1">{children}</main>
+            <FullscreenToggle />
             <AutoBackfillRunner />
             <SpotifyWebPlayer />
           </div>

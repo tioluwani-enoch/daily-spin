@@ -38,6 +38,7 @@ export function SpotifyWebPlayer() {
   const [isPaused, setIsPaused] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [queueUris, setQueueUris] = useState<string[]>([]);
+  const [queueTracks, setQueueTracks] = useState<QueueTrack[]>([]);
   const [queueIndex, setQueueIndex] = useState(0);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -45,6 +46,34 @@ export function SpotifyWebPlayer() {
   useEffect(() => {
     queueUrisRef.current = queueUris;
   }, [queueUris]);
+
+  useEffect(() => {
+    if (status !== "ready") {
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      const state = await playerRef.current?.getCurrentState();
+      if (!state) {
+        return;
+      }
+
+      const nextTrack = state.track_window.current_track ?? null;
+      setCurrentTrack(nextTrack);
+      setIsPaused(state.paused);
+      setPosition(state.position);
+      setDuration(state.duration);
+
+      if (nextTrack && queueUrisRef.current.length > 0) {
+        const nextIndex = queueUrisRef.current.findIndex((uri) => uri === nextTrack.uri);
+        if (nextIndex >= 0) {
+          setQueueIndex(nextIndex);
+        }
+      }
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [status]);
 
   useEffect(() => {
     async function getOAuthToken(callback: (token: string) => void) {
@@ -105,7 +134,11 @@ export function SpotifyWebPlayer() {
 
       player.addListener("authentication_error", ({ message: errorMessage }) => {
         setStatus("error");
-        setMessage(errorMessage);
+        setMessage(
+          errorMessage.includes("scope")
+            ? "Spotify gave Daily Spin an old token without Web Playback access. Disconnect, remove Daily Spin from your Spotify Apps page, then connect again."
+            : errorMessage
+        );
       });
 
       player.addListener("playback_error", ({ message: errorMessage }) => {
@@ -141,6 +174,7 @@ export function SpotifyWebPlayer() {
 
       setPendingTrack(resolvedQueue.pendingTrack);
       setQueueUris(resolvedQueue.uris);
+      setQueueTracks(resolvedQueue.tracks);
       setQueueIndex(resolvedQueue.index);
       setIsExpanded(true);
 
@@ -186,6 +220,9 @@ export function SpotifyWebPlayer() {
 
       const normalizedIndex = (nextIndex + queueUris.length) % queueUris.length;
       setQueueIndex(normalizedIndex);
+      if (queueTracks[normalizedIndex]) {
+        setPendingTrack(queueTrackToPayload(queueTracks[normalizedIndex]));
+      }
       const response = await fetch("/api/spotify/play", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -205,7 +242,7 @@ export function SpotifyWebPlayer() {
 
       setStatus("ready");
     },
-    [deviceId, queueUris]
+    [deviceId, queueTracks, queueUris]
   );
 
   useEffect(() => {
@@ -235,9 +272,10 @@ export function SpotifyWebPlayer() {
     <>
       <aside className="fixed bottom-4 right-4 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-ambient-edge bg-ambient-surface shadow-ambient backdrop-blur-xl">
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-12 blur-2xl"
+          className="absolute inset-0 bg-cover bg-center opacity-[0.08] blur-xl"
           style={{ backgroundImage: miniArtUrl ? `url(${miniArtUrl})` : undefined }}
         />
+        <div className="absolute inset-0 bg-ambient-surface/85" />
         <div className="relative p-3">
           <div className="flex items-center gap-3">
             {currentTrack?.album.images[0]?.url || pendingTrack?.imageUrl ? (
@@ -246,12 +284,12 @@ export function SpotifyWebPlayer() {
               <div className="h-14 w-14 shrink-0 rounded-md border border-ambient-edge bg-ambient-alt" />
             )}
             <div className="min-w-0 flex-1">
-            <p className="font-mono text-mono-sm uppercase text-ambient-muted">Player</p>
-            <h2 className="truncate text-h2 text-ambient-fg">{currentTrack?.name ?? pendingTrack?.name ?? "Daily Spin"}</h2>
-            <p className="truncate font-mono text-mono-sm text-ambient-muted">
-              {currentTrack ? currentTrack.artists.map((artist) => artist.name).join(", ") : pendingTrack?.artists?.join(", ") ?? message}
-            </p>
-          </div>
+              <p className="font-mono text-mono-sm uppercase text-ambient-muted">Player</p>
+              <h2 className="truncate text-h2 text-ambient-fg">{currentTrack?.name ?? pendingTrack?.name ?? "Daily Spin"}</h2>
+              <p className="truncate font-mono text-mono-sm text-ambient-muted">
+                {currentTrack ? currentTrack.artists.map((artist) => artist.name).join(", ") : pendingTrack?.artists?.join(", ") ?? message}
+              </p>
+            </div>
           </div>
           <ProgressBar position={position} duration={duration} />
           <PlayerControls
@@ -275,10 +313,16 @@ export function SpotifyWebPlayer() {
           track={currentTrack}
           pendingTrack={pendingTrack}
           isPaused={isPaused}
+          queueUris={queueUris}
+          queueTracks={queueTracks}
+          queueIndex={queueIndex}
+          position={position}
+          duration={duration}
           onClose={() => setIsExpanded(false)}
           onPrevious={() => (queueUris.length > 1 ? playQueueIndex(queueIndex - 1) : playerRef.current?.previousTrack())}
           onToggle={() => playerRef.current?.togglePlay()}
           onNext={() => (queueUris.length > 1 ? playQueueIndex(queueIndex + 1) : playerRef.current?.nextTrack())}
+          onSelectQueueTrack={playQueueIndex}
         />
       ) : null}
     </>
@@ -288,12 +332,25 @@ export function SpotifyWebPlayer() {
 async function resolvePlaybackQueue(payload: PlayTrackPayload): Promise<{
   uris: string[];
   index: number;
+  tracks: QueueTrack[];
   pendingTrack: PlayTrackPayload;
 }> {
   if (payload.queueUris && payload.queueUris.length > 1) {
+    const shuffledUris = shuffleQueueAroundCurrent(payload.queueUris, payload.uri);
     return {
-      uris: payload.queueUris,
-      index: payload.queueIndex ?? Math.max(0, payload.queueUris.findIndex((uri) => uri === payload.uri)),
+      uris: shuffledUris,
+      index: Math.max(0, shuffledUris.findIndex((uri) => uri === payload.uri)),
+      tracks: shuffledUris.map((uri, index) =>
+        uri === payload.uri
+          ? payloadToQueueTrack(payload)
+          : {
+              uri,
+              name: `Track ${index + 1}`,
+              artists: [],
+              album: "Daily Spin",
+              imageUrl: null
+            }
+      ),
       pendingTrack: payload
     };
   }
@@ -303,12 +360,13 @@ async function resolvePlaybackQueue(payload: PlayTrackPayload): Promise<{
     const data = (await response.json()) as { tracks?: QueueTrack[] };
     const tracks = data.tracks ?? [];
     const previewUris = tracks.map((track) => track.uri).filter(Boolean);
-    const queueUris = uniqueStrings(previewUris.includes(payload.uri) ? previewUris : [payload.uri, ...previewUris]);
+    const queueUris = shuffleQueueAroundCurrent(uniqueStrings(previewUris.includes(payload.uri) ? previewUris : [payload.uri, ...previewUris]), payload.uri);
     const selectedTrack = tracks.find((track) => track.uri === payload.uri);
 
     return {
       uris: queueUris.length > 0 ? queueUris : [payload.uri],
       index: Math.max(0, queueUris.findIndex((uri) => uri === payload.uri)),
+      tracks: queueUris.map((uri) => tracks.find((track) => track.uri === uri) ?? payloadToQueueTrack({ ...payload, uri })),
       pendingTrack: {
         ...payload,
         name: payload.name ?? selectedTrack?.name,
@@ -321,6 +379,7 @@ async function resolvePlaybackQueue(payload: PlayTrackPayload): Promise<{
     return {
       uris: [payload.uri],
       index: 0,
+      tracks: [payloadToQueueTrack(payload)],
       pendingTrack: payload
     };
   }
@@ -328,6 +387,38 @@ async function resolvePlaybackQueue(payload: PlayTrackPayload): Promise<{
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function shuffleQueueAroundCurrent(values: string[], currentUri: string): string[] {
+  const current = values.includes(currentUri) ? currentUri : values[0];
+  const rest = values.filter((uri) => uri !== current);
+
+  for (let index = rest.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [rest[index], rest[swapIndex]] = [rest[swapIndex], rest[index]];
+  }
+
+  return current ? [current, ...rest] : rest;
+}
+
+function payloadToQueueTrack(payload: PlayTrackPayload): QueueTrack {
+  return {
+    uri: payload.uri,
+    name: payload.name ?? "Daily Spin track",
+    artists: payload.artists ?? [],
+    album: payload.album ?? "Daily Spin",
+    imageUrl: payload.imageUrl ?? null
+  };
+}
+
+function queueTrackToPayload(track: QueueTrack): PlayTrackPayload {
+  return {
+    uri: track.uri,
+    name: track.name,
+    artists: track.artists,
+    album: track.album,
+    imageUrl: track.imageUrl
+  };
 }
 
 function PlayerControls({
@@ -394,18 +485,30 @@ function NowPlayingModal({
   track,
   pendingTrack,
   isPaused,
+  queueUris,
+  queueTracks,
+  queueIndex,
+  position,
+  duration,
   onClose,
   onPrevious,
   onToggle,
-  onNext
+  onNext,
+  onSelectQueueTrack
 }: {
   track: SpotifyTrackWindow | null;
   pendingTrack: PlayTrackEvent["detail"] | null;
   isPaused: boolean;
+  queueUris: string[];
+  queueTracks: QueueTrack[];
+  queueIndex: number;
+  position: number;
+  duration: number;
   onClose: () => void;
   onPrevious: () => void;
   onToggle: () => void;
   onNext: () => void;
+  onSelectQueueTrack: (index: number) => void;
 }) {
   const imageUrl = track?.album.images[0]?.url ?? pendingTrack?.imageUrl ?? "";
   const trackName = track?.name ?? pendingTrack?.name ?? "Preparing track";
@@ -422,7 +525,11 @@ function NowPlayingModal({
       />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.24),rgba(31,27,23,0.74))]" />
 
-      <section className="absolute left-1/2 top-1/2 flex max-h-[92vh] w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-white/25 bg-white/18 p-5 text-white shadow-ambient backdrop-blur-2xl sm:p-8">
+      <div className="absolute inset-x-0 top-[38%] -translate-y-1/2 pointer-events-none">
+        <WaveBars isPaused={isPaused} />
+      </div>
+
+      <section className="absolute left-1/2 top-1/2 flex max-h-[92vh] w-[min(62rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-white/25 bg-white/18 p-5 text-white shadow-ambient backdrop-blur-2xl sm:p-8">
         <div
           className="absolute inset-x-0 top-0 h-24 opacity-60 blur-2xl"
           style={{
@@ -436,15 +543,20 @@ function NowPlayingModal({
           </button>
         </div>
 
-        <div className="relative grid gap-7">
-          {imageUrl ? <img className="aspect-square w-full rounded-md border border-white/25 object-cover shadow-ambient" src={imageUrl} alt="" /> : null}
+        <div className="relative grid min-h-0 gap-7 lg:grid-cols-[minmax(0,1.08fr)_minmax(18rem,0.92fr)]">
           <div className="min-w-0">
-            <p className="font-mono text-mono-sm uppercase text-white/70">Now playing</p>
-            <h2 className="mt-3 text-display text-white">{trackName}</h2>
-            <p className="mt-2 truncate font-mono text-mono-sm text-white/72">{artists}</p>
-            <p className="mt-1 truncate text-meta text-white/62">{album}</p>
+            {imageUrl ? <img className="aspect-square w-full rounded-md border border-white/25 object-cover shadow-ambient lg:max-h-[48vh]" src={imageUrl} alt="" /> : null}
+            <div className="mt-7">
+              <p className="font-mono text-mono-sm uppercase text-white/70">Now playing</p>
+              <h2 className="mt-3 text-display text-white">{trackName}</h2>
+              <p className="mt-2 truncate font-mono text-mono-sm text-white/72">{artists}</p>
+              <p className="mt-1 truncate text-meta text-white/62">{album}</p>
+              <div className="mt-5">
+                <ProgressBar position={position} duration={duration} />
+              </div>
+            </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
               <button className="rounded-md border border-white/25 bg-white/10 p-3 transition hover:bg-white/18" type="button" onClick={onPrevious} aria-label="Previous track">
                 <SkipBack className="h-5 w-5" strokeWidth={1.5} />
               </button>
@@ -460,8 +572,54 @@ function NowPlayingModal({
               </button>
             </div>
           </div>
+
+          {queueUris.length > 1 ? (
+            <aside className="min-h-0 rounded-md bg-black/10 p-3 lg:mt-12 lg:max-h-[64vh]">
+              <div className="flex items-end justify-between gap-3 px-1 pb-4">
+                <div>
+                  <p className="font-mono text-mono-sm uppercase text-white/62">Up next</p>
+                  <p className="mt-1 font-mono text-mono-sm text-white/42">{queueIndex + 1} of {queueUris.length}</p>
+                </div>
+              </div>
+              <div className="player-queue-scroll max-h-56 overflow-y-auto pr-1 lg:max-h-[calc(64vh-4.5rem)]">
+                {queueUris.map((uri, index) => {
+                  const item = queueTracks[index];
+                  const isCurrent = index === queueIndex;
+
+                  return (
+                    <button
+                      key={`${uri}-${index}`}
+                      className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition ${
+                        isCurrent ? "bg-white text-black" : "text-white/78 hover:bg-white/12 hover:text-white"
+                      }`}
+                      type="button"
+                      onClick={() => onSelectQueueTrack(index)}
+                    >
+                      {item?.imageUrl ? <img className="h-9 w-9 rounded object-cover" src={item.imageUrl} alt="" /> : <span className="h-9 w-9 rounded bg-white/12" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-meta">{item?.name ?? `Track ${index + 1}`}</span>
+                        <span className={`block truncate font-mono text-mono-sm ${isCurrent ? "text-black/58" : "text-white/55"}`}>
+                          {item?.artists.join(", ") || uri.replace("spotify:track:", "")}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
+          ) : null}
         </div>
       </section>
     </div>
+  );
+}
+
+function WaveBars({ isPaused }: { isPaused: boolean }) {
+  return (
+    <span className={`wave-bars ${isPaused ? "wave-bars-paused" : ""}`} aria-hidden="true">
+      {Array.from({ length: 100 }).map((_, index) => (
+        <span key={index} style={{ animationDelay: `-${index * 24}ms` }} />
+      ))}
+    </span>
   );
 }

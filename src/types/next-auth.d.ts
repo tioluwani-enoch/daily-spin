@@ -6,6 +6,7 @@ declare module "next-auth" {
       id: string | null;
       hasAccessToken: boolean;
       expiresAt: number | null;
+      scopes: string[];
     };
   }
 }
@@ -16,5 +17,6 @@ declare module "next-auth/jwt" {
     spotifyRefreshToken?: string;
     spotifyExpiresAt?: number;
     spotifyId?: string;
+    spotifyScopes?: string;
   }
 }

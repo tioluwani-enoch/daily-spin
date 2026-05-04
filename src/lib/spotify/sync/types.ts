@@ -14,6 +14,7 @@ export type SpotifySyncResult = {
   playlists: number;
   playlistTracks: number;
   skippedPlaylists: number;
+  watchlistReleases: number;
   audioFeatures: {
     requested: number;
     stored: number;

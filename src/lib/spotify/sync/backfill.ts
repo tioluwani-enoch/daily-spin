@@ -52,6 +52,11 @@ type PlaylistTrackItem = {
   track: SpotifyTrack | null;
 };
 
+type WatchlistRow = {
+  artist_id: string;
+  include_compilations: boolean;
+};
+
 type StoredTrackForPick = {
   id: string;
   name: string;
@@ -183,6 +188,7 @@ export async function backfillSpotifyUser(tokens: SpotifyTokenSet): Promise<Spot
   }
 
   const audioFeatureResult = await fetchAndStoreAudioFeatures(tokens.accessToken, [...new Set([...savedTracks, ...recentTracks].map((track) => track.id!))]);
+  const watchlistReleases = await syncWatchlistReleases(tokens.accessToken, userId);
   const morningPickComputed = await computeAndStoreMorningPick(userId);
 
   return {
@@ -193,9 +199,100 @@ export async function backfillSpotifyUser(tokens: SpotifyTokenSet): Promise<Spot
     playlists: playlists.length,
     playlistTracks: playlistTrackCount,
     skippedPlaylists,
+    watchlistReleases,
     audioFeatures: audioFeatureResult,
     morningPickComputed
   };
+}
+
+async function syncWatchlistReleases(accessToken: string, userId: string): Promise<number> {
+  const supabase = createServiceSupabaseClient();
+  if (!supabase) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for Spotify backfill");
+  }
+
+  const { data: watchRows, error } = await supabase
+    .from("watchlist_artists")
+    .select("artist_id,include_compilations")
+    .eq("user_id", userId);
+  if (error) throw error;
+
+  const watchlist = (watchRows ?? []) as WatchlistRow[];
+  if (watchlist.length === 0) {
+    return 0;
+  }
+
+  const since = new Date(Date.now() - 30 * 86_400_000);
+  const albums: SpotifyAlbum[] = [];
+
+  for (const artist of watchlist) {
+    const includeGroups = artist.include_compilations ? "album,single,compilation" : "album,single";
+    let artistAlbums: SpotifyAlbum[] = [];
+
+    try {
+      artistAlbums = await getAllSpotifyPages<SpotifyAlbum>(
+        accessToken,
+        `https://api.spotify.com/v1/artists/${artist.artist_id}/albums?include_groups=${includeGroups}&limit=50`
+      );
+    } catch (error) {
+      if (error instanceof SpotifyApiError && (error.status === 400 || error.status === 403 || error.status === 404)) {
+        continue;
+      }
+
+      throw error;
+    }
+
+    albums.push(...artistAlbums.filter((album) => isRecentAlbum(album, since)));
+  }
+
+  const uniqueAlbums = uniqueBy(albums, (album) => album.id);
+  if (uniqueAlbums.length === 0) {
+    return 0;
+  }
+
+  const artistMap = new Map<string, SpotifyArtist>();
+  for (const album of uniqueAlbums) {
+    album.artists.forEach((artist) => artistMap.set(artist.id, artist));
+  }
+  const artists = await fetchFullArtists(accessToken, [...artistMap.values()]);
+
+  await writeChunks(
+    uniqueBy(
+      artists.map((artist) => ({
+        id: artist.id,
+        name: artist.name,
+        genres: artist.genres ?? [],
+        image_url: artist.images?.[0]?.url ?? null
+      })),
+      (artist) => artist.id
+    ),
+    (chunk) => throwIfError(supabase.from("artists").upsert(chunk, { onConflict: "id" }))
+  );
+
+  await writeChunks(
+    uniqueAlbums.map((album) => ({
+      id: album.id,
+      name: album.name,
+      artist_ids: album.artists.map((artist) => artist.id),
+      album_type: normalizeAlbumType(album.album_type),
+      release_date: normalizeReleaseDate(album.release_date, album.release_date_precision),
+      release_date_precision: album.release_date_precision ?? "day",
+      image_url: album.images?.[0]?.url ?? null,
+      spotify_url: album.external_urls?.spotify ?? null
+    })),
+    (chunk) => throwIfError(supabase.from("albums").upsert(chunk, { onConflict: "id" }))
+  );
+
+  await writeChunks(
+    uniqueAlbums.map((album) => ({
+      user_id: userId,
+      album_id: album.id,
+      surfaced_at: new Date().toISOString()
+    })),
+    (chunk) => throwIfError(supabase.from("new_releases").upsert(chunk, { onConflict: "user_id,album_id" }))
+  );
+
+  return uniqueAlbums.length;
 }
 
 async function upsertTrackGraph(accessToken: string, tracks: SpotifyTrack[]): Promise<void> {
@@ -212,10 +309,11 @@ async function upsertTrackGraph(accessToken: string, tracks: SpotifyTrack[]): Pr
     track.album.artists.forEach((artist) => artistMap.set(artist.id, artist));
     albumMap.set(track.album.id, track.album);
   }
+  const artists = await fetchFullArtists(accessToken, [...artistMap.values()]);
 
   await writeChunks(
     uniqueBy(
-      [...artistMap.values()].map((artist) => ({
+      artists.map((artist) => ({
         id: artist.id,
         name: artist.name,
         genres: artist.genres ?? [],
@@ -247,8 +345,26 @@ async function upsertTrackGraph(accessToken: string, tracks: SpotifyTrack[]): Pr
     uniqueBy(tracks.map(normalizeSpotifyTrackForStorage), (track) => track.id),
     (chunk) => throwIfError(supabase.from("tracks").upsert(chunk, { onConflict: "id" }))
   );
+}
 
-  void accessToken;
+async function fetchFullArtists(accessToken: string, artists: SpotifyArtist[]): Promise<SpotifyArtist[]> {
+  const fallbackById = new Map(artists.map((artist) => [artist.id, artist]));
+  const enrichedById = new Map<string, SpotifyArtist>();
+
+  for (const ids of chunkArray([...fallbackById.keys()], 50)) {
+    try {
+      const payload = await spotifyFetch<{ artists: SpotifyArtist[] }>(accessToken, `https://api.spotify.com/v1/artists?ids=${ids.join(",")}`);
+      payload.artists.forEach((artist) => enrichedById.set(artist.id, artist));
+    } catch (error) {
+      if (error instanceof SpotifyApiError && (error.status === 400 || error.status === 403 || error.status === 404)) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  return [...fallbackById.entries()].map(([id, artist]) => enrichedById.get(id) ?? artist);
 }
 
 async function fetchAndStoreAudioFeatures(
@@ -381,7 +497,7 @@ async function computeAndStoreMorningPick(userId: string): Promise<boolean> {
           user_id: userId,
           pick_date: toIsoDate(new Date()),
           track_id: fallback.track_id,
-          reason: "This came from your saved Spotify library; audio features are still syncing.",
+          reason: "Daily Spin is still learning your listening patterns, so this is a recommendation to try today. As more Spotify history syncs, these picks will get more personal.",
           score_breakdown: {
             recencyOfSave: 0,
             underplay: 0,
@@ -417,18 +533,34 @@ async function computeAndStoreMorningPick(userId: string): Promise<boolean> {
 
   await throwIfError(
     supabase.from("daily_picks").upsert(
-      {
-        user_id: userId,
-        pick_date: toIsoDate(new Date()),
-        track_id: chosen.track.id,
-        reason: "This saved track has enough signal to be worth returning to today.",
-        score_breakdown: chosen.scoreBreakdown as unknown as Json
-      },
+        {
+          user_id: userId,
+          pick_date: toIsoDate(new Date()),
+          track_id: chosen.track.id,
+          reason: formatMorningPickReason(chosen.track),
+          score_breakdown: chosen.scoreBreakdown as unknown as Json
+        },
       { onConflict: "user_id,pick_date,track_id" }
     )
   );
 
   return true;
+}
+
+function formatMorningPickReason(track: PickCandidate): string {
+  if (track.playCount90 === 0) {
+    return "You saved this and have not played it in the last 90 days. It is a good one to rescue from the quiet part of your library.";
+  }
+
+  if (track.daysSinceLastPlay !== null && track.daysSinceLastPlay >= 30) {
+    return `You have played this before, but not for ${track.daysSinceLastPlay} days. It still fits your recent listening profile, so it is worth bringing back today.`;
+  }
+
+  if (track.popularity < 35) {
+    return "This is one of the less obvious saved tracks in your library. Daily Spin picked it because it has enough signal without feeling overplayed.";
+  }
+
+  return "This saved track sits close to your recent listening, but it has not been crowding your rotation. It is a low-friction pick for today.";
 }
 
 async function recomputePlaylistFingerprint(playlistId: string, playlistName: string, userId: string): Promise<void> {
@@ -499,6 +631,19 @@ function normalizeReleaseDate(releaseDate: string | null, precision: SpotifyAlbu
   if (precision === "year") return `${releaseDate}-01-01`;
   if (precision === "month") return `${releaseDate}-01`;
   return releaseDate;
+}
+
+function normalizeAlbumType(albumType: SpotifyAlbum["album_type"]): "album" | "single" | "compilation" {
+  if (albumType === "single" || albumType === "compilation") {
+    return albumType;
+  }
+
+  return "album";
+}
+
+function isRecentAlbum(album: SpotifyAlbum, since: Date): boolean {
+  const releaseDate = normalizeReleaseDate(album.release_date, album.release_date_precision);
+  return new Date(`${releaseDate}T00:00:00.000Z`) >= since;
 }
 
 export function normalizeSpotifyTrackForStorage(track: SpotifyTrack) {

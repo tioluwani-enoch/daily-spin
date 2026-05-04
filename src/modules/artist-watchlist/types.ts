@@ -14,6 +14,7 @@ export type NewRelease = {
     type: "album" | "single" | "compilation";
     releaseDate: string;
     imageUrl: string | null;
+    spotifyUrl: string | null;
     artistIds: string[];
   };
   surfacedAt: string;

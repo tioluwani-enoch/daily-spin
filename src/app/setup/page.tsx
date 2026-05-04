@@ -1,6 +1,7 @@
 import { SpotifyConnectButton } from "@/lib/auth/ui/SpotifyConnectButton";
 import { BackfillButton } from "@/lib/spotify/ui/BackfillButton";
 import { LibraryPreview } from "@/lib/spotify/ui/LibraryPreview";
+import { WatchlistManager } from "@/modules/artist-watchlist/ui/WatchlistManager";
 
 export default function SetupPage() {
   return (
@@ -16,6 +17,7 @@ export default function SetupPage() {
         </div>
       </section>
       <BackfillButton />
+      <WatchlistManager />
       <LibraryPreview />
     </div>
   );

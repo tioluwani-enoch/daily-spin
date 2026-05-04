@@ -23,9 +23,13 @@ export function NewReleasesRow({ releases }: { releases: NewRelease[] }) {
         {releases.map((release) => (
           <Card key={release.id} className="p-4 shadow-none">
             <div className="flex items-center gap-4">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded border border-ambient-edge bg-ambient-alt">
-                <Disc3 className="h-5 w-5 text-ambient-muted" strokeWidth={1.5} />
-              </div>
+              {release.album.imageUrl ? (
+                <img className="h-12 w-12 shrink-0 rounded border border-ambient-edge object-cover" src={release.album.imageUrl} alt="" />
+              ) : (
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded border border-ambient-edge bg-ambient-alt">
+                  <Disc3 className="h-5 w-5 text-ambient-muted" strokeWidth={1.5} />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="truncate text-h2 text-ambient-fg">{release.album.name}</h3>
@@ -36,7 +40,7 @@ export function NewReleasesRow({ releases }: { releases: NewRelease[] }) {
               <a
                 aria-label={`Open ${release.album.name} in Spotify`}
                 className="rounded-md p-2 text-ambient-muted transition hover:text-ambient-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ambient-accent"
-                href="https://open.spotify.com"
+                href={release.album.spotifyUrl ?? "https://open.spotify.com"}
                 target="_blank"
                 rel="noreferrer"
               >
