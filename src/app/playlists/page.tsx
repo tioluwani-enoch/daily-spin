@@ -8,7 +8,7 @@ export default async function PlaylistsPage() {
   return (
     <div>
       <p className="font-mono text-mono-sm uppercase text-ambient-muted">Playlist health</p>
-      <h1 className="mt-2 text-display text-ambient-fg">Keep the gardens in shape.</h1>
+      <h1 className="mt-2 text-h1 text-ambient-fg sm:text-display">Keep the gardens in shape.</h1>
       <div className="mt-10">
         <PlaylistList playlists={playlists} />
       </div>

@@ -3,7 +3,9 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { getServerEnv } from "@/lib/env/server";
+import { getUsableSpotifyTokens, refreshTokenSet, SpotifySessionError } from "@/lib/spotify/auth";
 import { backfillSpotifyUser } from "@/lib/spotify/sync/backfill";
+import { SpotifyApiError } from "@/lib/spotify/sync/spotify-api";
 
 export async function POST(request: NextRequest) {
   const env = getServerEnv();
@@ -12,7 +14,7 @@ export async function POST(request: NextRequest) {
     secret: env.NEXTAUTH_SECRET
   });
 
-  if (!token?.spotifyAccessToken) {
+  if (!token) {
     return NextResponse.json({ error: "Spotify is not connected" }, { status: 401 });
   }
 
@@ -21,15 +23,27 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await backfillSpotifyUser({
-      accessToken: token.spotifyAccessToken,
-      refreshToken: token.spotifyRefreshToken ?? null,
-      expiresAt: token.spotifyExpiresAt ?? null
-    });
+    let tokens = await getUsableSpotifyTokens(token);
+    let result;
+
+    try {
+      result = await backfillSpotifyUser(tokens);
+    } catch (error) {
+      if (!(error instanceof SpotifyApiError) || error.status !== 401) {
+        throw error;
+      }
+
+      tokens = await refreshTokenSet(tokens);
+      result = await backfillSpotifyUser(tokens);
+    }
 
     return NextResponse.json({ result });
   } catch (error) {
     console.error(error);
+    if (error instanceof SpotifySessionError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Spotify backfill failed"

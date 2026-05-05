@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { getServerEnv } from "@/lib/env/server";
+import { getUsableSpotifyTokens, refreshTokenSet, SpotifySessionError } from "@/lib/spotify/auth";
 
 type SpotifySavedTrackResponse = {
   items: Array<{
@@ -33,16 +34,35 @@ export async function GET(request: NextRequest) {
     secret: env.NEXTAUTH_SECRET
   });
 
-  if (!token?.spotifyAccessToken) {
+  if (!token) {
     return NextResponse.json({ error: "Spotify is not connected" }, { status: 401 });
   }
 
-  const response = await fetch("https://api.spotify.com/v1/me/tracks?limit=20", {
-    headers: {
-      authorization: `Bearer ${token.spotifyAccessToken}`
-    },
-    cache: "no-store"
-  });
+  let tokens;
+  try {
+    tokens = await getUsableSpotifyTokens(token);
+  } catch (error) {
+    if (error instanceof SpotifySessionError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    throw error;
+  }
+
+  let response = await fetchSavedTracks(tokens.accessToken);
+
+  if (response.status === 401) {
+    try {
+      tokens = await refreshTokenSet(tokens);
+      response = await fetchSavedTracks(tokens.accessToken);
+    } catch (error) {
+      if (error instanceof SpotifySessionError) {
+        return NextResponse.json({ error: error.message }, { status: 401 });
+      }
+
+      throw error;
+    }
+  }
 
   if (!response.ok) {
     return NextResponse.json(
@@ -67,5 +87,14 @@ export async function GET(request: NextRequest) {
       spotifyUrl: item.track.external_urls.spotify,
       savedAt: item.added_at
     }))
+  });
+}
+
+function fetchSavedTracks(accessToken: string): Promise<Response> {
+  return fetch("https://api.spotify.com/v1/me/tracks?limit=20", {
+    headers: {
+      authorization: `Bearer ${accessToken}`
+    },
+    cache: "no-store"
   });
 }

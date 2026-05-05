@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { getServerEnv } from "@/lib/env/server";
+import { getUsableSpotifyTokens, refreshTokenSet, SpotifySessionError } from "@/lib/spotify/auth";
 
 export async function POST(request: NextRequest) {
   const env = getServerEnv();
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
     secret: env.NEXTAUTH_SECRET
   });
 
-  if (!token?.spotifyAccessToken) {
+  if (!token) {
     return NextResponse.json({ error: "Spotify is not connected" }, { status: 401 });
   }
 
@@ -23,17 +24,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "deviceId and uri or uris are required" }, { status: 400 });
   }
 
-  const transferResponse = await fetch("https://api.spotify.com/v1/me/player", {
-    method: "PUT",
-    headers: {
-      authorization: `Bearer ${token.spotifyAccessToken}`,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      device_ids: [body.deviceId],
-      play: false
-    })
-  });
+  let tokens;
+  try {
+    tokens = await getUsableSpotifyTokens(token);
+  } catch (error) {
+    if (error instanceof SpotifySessionError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    throw error;
+  }
+
+  let transferResponse = await transferPlayback(tokens.accessToken, body.deviceId);
+
+  if (transferResponse.status === 401) {
+    try {
+      tokens = await refreshTokenSet(tokens);
+      transferResponse = await transferPlayback(tokens.accessToken, body.deviceId);
+    } catch (error) {
+      if (error instanceof SpotifySessionError) {
+        return NextResponse.json({ error: error.message }, { status: 401 });
+      }
+
+      throw error;
+    }
+  }
 
   if (!transferResponse.ok && transferResponse.status !== 404) {
     return NextResponse.json(
@@ -48,11 +63,24 @@ export async function POST(request: NextRequest) {
 
   await new Promise((resolve) => setTimeout(resolve, 700));
 
-  let response = await playTrack(token.spotifyAccessToken, body.deviceId, uris, body.offset ?? 0);
+  let response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0);
+
+  if (response.status === 401) {
+    try {
+      tokens = await refreshTokenSet(tokens);
+      response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0);
+    } catch (error) {
+      if (error instanceof SpotifySessionError) {
+        return NextResponse.json({ error: error.message }, { status: 401 });
+      }
+
+      throw error;
+    }
+  }
 
   if (response.status === 404) {
     await new Promise((resolve) => setTimeout(resolve, 900));
-    response = await playTrack(token.spotifyAccessToken, body.deviceId, uris, body.offset ?? 0);
+    response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0);
   }
 
   if (!response.ok) {
@@ -67,6 +95,20 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ ok: true });
+}
+
+function transferPlayback(accessToken: string, deviceId: string): Promise<Response> {
+  return fetch("https://api.spotify.com/v1/me/player", {
+    method: "PUT",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      device_ids: [deviceId],
+      play: false
+    })
+  });
 }
 
 async function playTrack(accessToken: unknown, deviceId: string, uris: string[], offset: number): Promise<Response> {

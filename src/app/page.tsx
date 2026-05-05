@@ -20,10 +20,10 @@ export default async function HomePage() {
   ]);
 
   return (
-    <div className="grid gap-12">
+    <div className="grid gap-10 sm:gap-12">
       <section>
         <p className="font-mono text-mono-sm uppercase text-ambient-muted">Morning ritual</p>
-        <h1 className="mt-2 max-w-2xl text-display text-ambient-fg">A small room for today&apos;s listening.</h1>
+        <h1 className="mt-2 max-w-2xl text-h1 text-ambient-fg sm:text-display">A small room for today&apos;s listening.</h1>
         <div className="mt-6">
           <SpotifyConnectButton />
         </div>

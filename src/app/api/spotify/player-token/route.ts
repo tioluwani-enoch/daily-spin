@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { getServerEnv } from "@/lib/env/server";
+import { getUsableSpotifyTokens, SpotifySessionError } from "@/lib/spotify/auth";
 
 const REQUIRED_WEB_PLAYBACK_SCOPES = ["streaming", "user-read-email", "user-read-private"];
 
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
     secret: env.NEXTAUTH_SECRET
   });
 
-  if (!token?.spotifyAccessToken) {
+  if (!token) {
     return NextResponse.json({ error: "Spotify is not connected" }, { status: 401 });
   }
 
@@ -29,7 +30,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({
-    accessToken: token.spotifyAccessToken
-  });
+  try {
+    const tokens = await getUsableSpotifyTokens(token);
+    return NextResponse.json({
+      accessToken: tokens.accessToken
+    });
+  } catch (error) {
+    if (error instanceof SpotifySessionError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    throw error;
+  }
 }

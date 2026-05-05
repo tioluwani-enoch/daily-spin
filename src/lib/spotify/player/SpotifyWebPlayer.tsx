@@ -270,7 +270,7 @@ export function SpotifyWebPlayer() {
 
   return (
     <>
-      <aside className="fixed bottom-4 right-4 z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-ambient-edge bg-ambient-surface shadow-ambient backdrop-blur-xl">
+      <aside className="fixed inset-x-3 bottom-3 z-40 overflow-hidden rounded-lg border border-ambient-edge bg-ambient-surface shadow-ambient backdrop-blur-xl sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-[22rem]">
         <div
           className="absolute inset-0 bg-cover bg-center opacity-[0.08] blur-xl"
           style={{ backgroundImage: miniArtUrl ? `url(${miniArtUrl})` : undefined }}
@@ -439,7 +439,7 @@ function PlayerControls({
   canExpand: boolean;
 }) {
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-2">
+    <div className="mt-3 grid grid-cols-[auto_1fr_auto_auto] items-center gap-2">
       <Button type="button" variant="ghost" onClick={onPrevious} disabled={!isReady}>
         <SkipBack className="h-4 w-4" strokeWidth={1.5} />
       </Button>
@@ -529,7 +529,7 @@ function NowPlayingModal({
         <WaveBars isPaused={isPaused} />
       </div>
 
-      <section className="absolute left-1/2 top-1/2 flex max-h-[92vh] w-[min(62rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-white/25 bg-white/18 p-5 text-white shadow-ambient backdrop-blur-2xl sm:p-8">
+      <section className="absolute inset-x-3 top-1/2 flex max-h-[92dvh] -translate-y-1/2 flex-col overflow-y-auto rounded-lg border border-white/25 bg-white/18 p-4 text-white shadow-ambient backdrop-blur-2xl sm:left-1/2 sm:right-auto sm:w-[min(62rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:overflow-hidden sm:p-8">
         <div
           className="absolute inset-x-0 top-0 h-24 opacity-60 blur-2xl"
           style={{
@@ -545,18 +545,18 @@ function NowPlayingModal({
 
         <div className="relative grid min-h-0 gap-7 lg:grid-cols-[minmax(0,1.08fr)_minmax(18rem,0.92fr)]">
           <div className="min-w-0">
-            {imageUrl ? <img className="aspect-square w-full rounded-md border border-white/25 object-cover shadow-ambient lg:max-h-[48vh]" src={imageUrl} alt="" /> : null}
-            <div className="mt-7">
+            {imageUrl ? <img className="aspect-square w-full rounded-md border border-white/25 object-cover shadow-ambient sm:max-h-[42vh] lg:max-h-[48vh]" src={imageUrl} alt="" /> : null}
+            <div className="mt-5 sm:mt-7">
               <p className="font-mono text-mono-sm uppercase text-white/70">Now playing</p>
-              <h2 className="mt-3 text-display text-white">{trackName}</h2>
-              <p className="mt-2 truncate font-mono text-mono-sm text-white/72">{artists}</p>
-              <p className="mt-1 truncate text-meta text-white/62">{album}</p>
+              <h2 className="mt-3 break-words text-h1 text-white sm:text-display">{trackName}</h2>
+              <p className="mt-2 break-words font-mono text-mono-sm text-white/72 sm:truncate">{artists}</p>
+              <p className="mt-1 break-words text-meta text-white/62 sm:truncate">{album}</p>
               <div className="mt-5">
                 <ProgressBar position={position} duration={duration} />
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center gap-3">
+            <div className="mt-6 grid grid-cols-[auto_1fr_auto_auto] items-center gap-3">
               <button className="rounded-md border border-white/25 bg-white/10 p-3 transition hover:bg-white/18" type="button" onClick={onPrevious} aria-label="Previous track">
                 <SkipBack className="h-5 w-5" strokeWidth={1.5} />
               </button>
@@ -567,7 +567,7 @@ function NowPlayingModal({
               <button className="rounded-md border border-white/25 bg-white/10 p-3 transition hover:bg-white/18" type="button" onClick={onNext} aria-label="Next track">
                 <SkipForward className="h-5 w-5" strokeWidth={1.5} />
               </button>
-              <button className="ml-auto rounded-md border border-white/25 bg-white/10 p-3 transition hover:bg-white/18" type="button" onClick={onClose} aria-label="Minimize player">
+              <button className="rounded-md border border-white/25 bg-white/10 p-3 transition hover:bg-white/18" type="button" onClick={onClose} aria-label="Minimize player">
                 <Minimize2 className="h-5 w-5" strokeWidth={1.5} />
               </button>
             </div>

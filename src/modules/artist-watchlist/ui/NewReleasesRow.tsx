@@ -22,7 +22,7 @@ export function NewReleasesRow({ releases }: { releases: NewRelease[] }) {
         ) : null}
         {releases.map((release) => (
           <Card key={release.id} className="p-4 shadow-none">
-            <div className="flex items-center gap-4">
+            <div className="flex items-start gap-3 sm:items-center sm:gap-4">
               {release.album.imageUrl ? (
                 <img className="h-12 w-12 shrink-0 rounded border border-ambient-edge object-cover" src={release.album.imageUrl} alt="" />
               ) : (
@@ -32,7 +32,7 @@ export function NewReleasesRow({ releases }: { releases: NewRelease[] }) {
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="truncate text-h2 text-ambient-fg">{release.album.name}</h3>
+                  <h3 className="break-words text-h2 text-ambient-fg sm:truncate">{release.album.name}</h3>
                   <Tag>{release.album.type}</Tag>
                 </div>
                 <p className="font-mono text-mono-sm text-ambient-muted">{release.album.releaseDate}</p>

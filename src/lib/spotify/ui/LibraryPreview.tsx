@@ -65,12 +65,12 @@ export function LibraryPreview() {
               className="flex items-center gap-3 rounded-md border border-ambient-edge p-3 transition hover:border-ambient-accent"
             >
               {track.imageUrl ? <img className="h-12 w-12 rounded border border-ambient-edge object-cover" src={track.imageUrl} alt="" /> : null}
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="block truncate text-meta text-ambient-fg">{track.name}</span>
                 <span className="block truncate font-mono text-mono-sm text-ambient-muted">{track.artists.join(", ")}</span>
               </span>
               <button
-                className="ml-auto shrink-0 rounded-md border border-ambient-edge px-3 py-2 text-meta text-ambient-fg transition hover:border-ambient-accent"
+                className="shrink-0 rounded-md border border-ambient-edge px-3 py-2 text-meta text-ambient-fg transition hover:border-ambient-accent"
                 type="button"
                 onClick={(event) => {
                   event.preventDefault();

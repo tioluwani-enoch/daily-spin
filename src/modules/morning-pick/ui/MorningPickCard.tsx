@@ -18,21 +18,21 @@ export function MorningPickCard({ pick }: { pick: MorningPick | null }) {
 
   return (
     <Card className="group">
-      <div className="flex items-start gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         {pick.imageUrl ? (
-          <img className="h-16 w-16 shrink-0 rounded-md border border-ambient-edge object-cover transition group-hover:scale-[1.02]" src={pick.imageUrl} alt="" />
+          <img className="aspect-square w-full shrink-0 rounded-md border border-ambient-edge object-cover transition group-hover:scale-[1.02] sm:h-16 sm:w-16" src={pick.imageUrl} alt="" />
         ) : (
-          <div className="h-16 w-16 shrink-0 rounded-md border border-ambient-edge bg-ambient-alt" />
+          <div className="aspect-square w-full shrink-0 rounded-md border border-ambient-edge bg-ambient-alt sm:h-16 sm:w-16" />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-mono text-mono-sm uppercase text-ambient-muted">Today&apos;s pick</p>
             <Tag>{pick.pickDate}</Tag>
           </div>
-          <h2 className="mt-3 text-h1 text-ambient-fg">{pick.trackName ?? "Track metadata is syncing."}</h2>
-          <p className="truncate font-mono text-mono-sm text-ambient-muted">{pick.artists.length > 0 ? pick.artists.join(", ") : pick.trackId}</p>
+          <h2 className="mt-3 break-words text-h1 text-ambient-fg">{pick.trackName ?? "Track metadata is syncing."}</h2>
+          <p className="break-words font-mono text-mono-sm text-ambient-muted sm:truncate">{pick.artists.length > 0 ? pick.artists.join(", ") : pick.trackId}</p>
           <p className="mt-4 text-body text-ambient-fg">{formatPickReason(pick.reason)}</p>
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-6 grid gap-2 sm:flex sm:flex-wrap">
             <MorningPickPlayButton pick={pick} />
             <a
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-ambient-edge px-3 py-2 text-meta text-ambient-fg transition hover:border-ambient-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ambient-accent"

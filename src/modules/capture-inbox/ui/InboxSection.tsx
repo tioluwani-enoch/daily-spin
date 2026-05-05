@@ -32,7 +32,7 @@ export function InboxSection({ captures }: { captures: Capture[] }) {
                     <Tag>{capture.source}</Tag>
                   </div>
                   {capture.resolutionNotes ? <p className="mt-1 text-meta text-ambient-muted">{capture.resolutionNotes}</p> : null}
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
                     <form action="/api/captures/triage" method="post">
                       <input type="hidden" name="captureId" value={capture.id} />
                       <input type="hidden" name="action" value="for-later" />

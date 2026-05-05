@@ -2,6 +2,7 @@ import SpotifyProvider from "next-auth/providers/spotify";
 
 import { getServerEnv } from "@/lib/env/server";
 import { SPOTIFY_SCOPES } from "@/lib/auth/spotify-scopes";
+import { refreshSpotifyToken } from "@/lib/spotify/sync/spotify-api";
 
 import type { NextAuthOptions } from "next-auth";
 
@@ -29,7 +30,7 @@ export function getAuthOptions(): NextAuthOptions {
       strategy: "jwt"
     },
     callbacks: {
-      jwt({ token, account, profile }) {
+      async jwt({ token, account, profile }) {
         const spotifyProfile = profile as { id?: string; sub?: string } | undefined;
 
         if (account?.provider === "spotify" && (spotifyProfile?.id || spotifyProfile?.sub)) {
@@ -50,6 +51,21 @@ export function getAuthOptions(): NextAuthOptions {
 
         if (account?.expires_at) {
           token.spotifyExpiresAt = account.expires_at;
+        }
+
+        if (!account && token.spotifyRefreshToken && token.spotifyExpiresAt) {
+          const shouldRefresh = token.spotifyExpiresAt <= Math.floor(Date.now() / 1000) + 60;
+
+          if (shouldRefresh) {
+            try {
+              const refreshed = await refreshSpotifyToken(token.spotifyRefreshToken);
+              token.spotifyAccessToken = refreshed.accessToken;
+              token.spotifyRefreshToken = refreshed.refreshToken ?? token.spotifyRefreshToken;
+              token.spotifyExpiresAt = refreshed.expiresAt ?? token.spotifyExpiresAt;
+            } catch (error) {
+              console.error("Spotify token refresh failed", error);
+            }
+          }
         }
 
         return token;

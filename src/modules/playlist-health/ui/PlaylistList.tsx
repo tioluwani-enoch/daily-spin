@@ -17,9 +17,9 @@ export function PlaylistList({ playlists }: { playlists: PlaylistHealth[] }) {
       {playlists.map((playlist) => (
         <Link key={playlist.playlistId} href={`/playlists/${playlist.playlistId}`}>
           <Card className="p-4 shadow-none transition hover:border-ambient-accent">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-h2 text-ambient-fg">{playlist.name}</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h2 className="break-words text-h2 text-ambient-fg">{playlist.name}</h2>
                 <p className="font-mono text-mono-sm text-ambient-muted">
                   {playlist.trackCount} tracks &middot; drift {playlist.driftScore.toFixed(2)}
                 </p>
