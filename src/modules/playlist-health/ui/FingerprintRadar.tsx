@@ -22,7 +22,7 @@ function pointsFor(fingerprint: Fingerprint, radius: number): string {
 
 export function FingerprintRadar({ core, recent }: { core: Fingerprint; recent: Fingerprint }) {
   return (
-    <svg className="h-40 w-40" viewBox="0 0 100 100" role="img" aria-label="Playlist fingerprint radar">
+    <svg className="h-40 w-40 shrink-0 self-center" viewBox="0 0 100 100" role="img" aria-label="Playlist fingerprint radar">
       <circle cx="50" cy="50" r="36" fill="none" stroke="var(--ambient-edge)" strokeWidth="0.75" />
       <circle cx="50" cy="50" r="22" fill="none" stroke="var(--ambient-edge)" strokeWidth="0.75" />
       <polygon points={pointsFor(core, 36)} fill="var(--ambient-accent)" fillOpacity="0.16" stroke="var(--ambient-accent)" strokeWidth="1.4" />

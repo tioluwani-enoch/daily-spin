@@ -17,12 +17,12 @@ export function MorningPickCard({ pick }: { pick: MorningPick | null }) {
   }
 
   return (
-    <Card className="group">
+      <Card className="group">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         {pick.imageUrl ? (
-          <img className="aspect-square w-full shrink-0 rounded-md border border-ambient-edge object-cover transition group-hover:scale-[1.02] sm:h-16 sm:w-16" src={pick.imageUrl} alt="" />
+          <img className="aspect-square w-28 shrink-0 rounded-md border border-ambient-edge object-cover transition group-hover:scale-[1.02] sm:h-16 sm:w-16" src={pick.imageUrl} alt="" />
         ) : (
-          <div className="aspect-square w-full shrink-0 rounded-md border border-ambient-edge bg-ambient-alt sm:h-16 sm:w-16" />
+          <div className="aspect-square w-28 shrink-0 rounded-md border border-ambient-edge bg-ambient-alt sm:h-16 sm:w-16" />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -35,7 +35,7 @@ export function MorningPickCard({ pick }: { pick: MorningPick | null }) {
           <div className="mt-6 grid gap-2 sm:flex sm:flex-wrap">
             <MorningPickPlayButton pick={pick} />
             <a
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-ambient-edge px-3 py-2 text-meta text-ambient-fg transition hover:border-ambient-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ambient-accent"
+              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-ambient-edge px-3 py-2 text-meta text-ambient-fg transition hover:border-ambient-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ambient-accent sm:w-auto"
               href={pick.spotifyUrl ?? `https://open.spotify.com/track/${pick.trackId}`}
               target="_blank"
               rel="noreferrer"
@@ -43,9 +43,9 @@ export function MorningPickCard({ pick }: { pick: MorningPick | null }) {
               <ExternalLink className="h-4 w-4" strokeWidth={1.5} />
               Play in Spotify
             </a>
-            <form action="/api/morning-pick/dismiss" method="post">
+            <form action="/api/morning-pick/dismiss" method="post" className="sm:inline-flex">
               <input type="hidden" name="pickId" value={pick.id} />
-              <Button type="submit" variant="ghost">
+              <Button type="submit" variant="ghost" className="w-full sm:w-auto">
                 <RotateCcw className="h-4 w-4" strokeWidth={1.5} />
                 Randomize
               </Button>

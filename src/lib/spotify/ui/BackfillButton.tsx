@@ -64,7 +64,7 @@ export function BackfillButton() {
           <h2 className="mt-1 text-h2 text-ambient-fg">Sync your real Spotify data</h2>
           <p className="mt-2 text-meta text-ambient-muted">This writes saved tracks, recent plays, playlists, playlist tracks, and today&apos;s pick into Supabase.</p>
         </div>
-        <Button type="button" variant="accent" onClick={runBackfill} disabled={status === "running"}>
+        <Button type="button" variant="accent" onClick={runBackfill} disabled={status === "running"} className="w-full sm:w-auto">
           <DatabaseZap className="h-4 w-4" strokeWidth={1.5} />
           {status === "running" ? "Syncing" : "Run backfill"}
         </Button>

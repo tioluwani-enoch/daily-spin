@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward, Volume2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward, Volume2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/lib/ui";
@@ -42,10 +42,20 @@ export function SpotifyWebPlayer() {
   const [queueIndex, setQueueIndex] = useState(0);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const queueIndexRef = useRef(0);
+  const positionRef = useRef(0);
 
   useEffect(() => {
     queueUrisRef.current = queueUris;
   }, [queueUris]);
+
+  useEffect(() => {
+    queueIndexRef.current = queueIndex;
+  }, [queueIndex]);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
 
   useEffect(() => {
     if (status !== "ready") {
@@ -229,7 +239,8 @@ export function SpotifyWebPlayer() {
         body: JSON.stringify({
           deviceId,
           uris: queueUris,
-          offset: normalizedIndex
+          offset: normalizedIndex,
+          transfer: false
         })
       });
 
@@ -245,26 +256,46 @@ export function SpotifyWebPlayer() {
     [deviceId, queueTracks, queueUris]
   );
 
-  useEffect(() => {
-    if (status !== "ready") {
-      return;
-    }
-
-    const interval = window.setInterval(async () => {
-      const state = await playerRef.current?.getCurrentState();
-      if (!state || state.paused || queueUrisRef.current.length < 2) {
+  const moveQueueTrack = useCallback(
+    async (fromIndex: number, direction: -1 | 1) => {
+      if (!deviceId || queueUris.length < 2) {
         return;
       }
 
-      const isAtEnd = state.duration > 0 && state.duration - state.position <= 900;
-      if (isAtEnd) {
-        const currentIndex = queueUrisRef.current.findIndex((uri) => uri === state.track_window.current_track.uri);
-        await playQueueIndex(currentIndex >= 0 ? currentIndex + 1 : queueIndex + 1);
+      const toIndex = fromIndex + direction;
+      if (toIndex < 0 || toIndex >= queueUris.length) {
+        return;
       }
-    }, 1200);
 
-    return () => window.clearInterval(interval);
-  }, [playQueueIndex, queueIndex, status]);
+      const nextUris = moveItem(queueUris, fromIndex, toIndex);
+      const nextTracks = moveItem(queueTracks, fromIndex, toIndex);
+      const currentUri = queueUris[queueIndexRef.current];
+      const nextCurrentIndex = Math.max(0, nextUris.findIndex((uri) => uri === currentUri));
+
+      setQueueUris(nextUris);
+      setQueueTracks(nextTracks);
+      setQueueIndex(nextCurrentIndex);
+
+      const response = await fetch("/api/spotify/play", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          deviceId,
+          uris: nextUris,
+          offset: nextCurrentIndex,
+          positionMs: positionRef.current,
+          transfer: false
+        })
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string; status?: number };
+        setStatus("error");
+        setMessage(`${payload.error ?? "Queue reorder failed"}${payload.status ? ` (${payload.status})` : ""}. Try playing the track again so Daily Spin can rebuild the queue.`);
+      }
+    },
+    [deviceId, queueTracks, queueUris]
+  );
 
   const miniArtUrl = currentTrack?.album.images[0]?.url ?? pendingTrack?.imageUrl ?? "";
 
@@ -323,6 +354,7 @@ export function SpotifyWebPlayer() {
           onToggle={() => playerRef.current?.togglePlay()}
           onNext={() => (queueUris.length > 1 ? playQueueIndex(queueIndex + 1) : playerRef.current?.nextTrack())}
           onSelectQueueTrack={playQueueIndex}
+          onMoveQueueTrack={moveQueueTrack}
         />
       ) : null}
     </>
@@ -421,6 +453,13 @@ function queueTrackToPayload(track: QueueTrack): PlayTrackPayload {
   };
 }
 
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  const nextItems = [...items];
+  const [item] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, item);
+  return nextItems;
+}
+
 function PlayerControls({
   isPaused,
   isReady,
@@ -494,7 +533,8 @@ function NowPlayingModal({
   onPrevious,
   onToggle,
   onNext,
-  onSelectQueueTrack
+  onSelectQueueTrack,
+  onMoveQueueTrack
 }: {
   track: SpotifyTrackWindow | null;
   pendingTrack: PlayTrackEvent["detail"] | null;
@@ -509,6 +549,7 @@ function NowPlayingModal({
   onToggle: () => void;
   onNext: () => void;
   onSelectQueueTrack: (index: number) => void;
+  onMoveQueueTrack: (index: number, direction: -1 | 1) => void;
 }) {
   const imageUrl = track?.album.images[0]?.url ?? pendingTrack?.imageUrl ?? "";
   const trackName = track?.name ?? pendingTrack?.name ?? "Preparing track";
@@ -529,7 +570,7 @@ function NowPlayingModal({
         <WaveBars isPaused={isPaused} />
       </div>
 
-      <section className="absolute inset-x-3 top-1/2 flex max-h-[92dvh] -translate-y-1/2 flex-col overflow-y-auto rounded-lg border border-white/25 bg-white/18 p-4 text-white shadow-ambient backdrop-blur-2xl sm:left-1/2 sm:right-auto sm:w-[min(62rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:overflow-hidden sm:p-8">
+      <section className="absolute inset-x-3 top-1/2 flex max-h-[92dvh] -translate-y-1/2 flex-col overflow-y-auto rounded-lg border border-white/25 bg-white/18 p-4 text-white shadow-ambient backdrop-blur-2xl sm:left-1/2 sm:right-auto sm:w-[min(62rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:p-8">
         <div
           className="absolute inset-x-0 top-0 h-24 opacity-60 blur-2xl"
           style={{
@@ -587,22 +628,50 @@ function NowPlayingModal({
                   const isCurrent = index === queueIndex;
 
                   return (
-                    <button
+                    <div
                       key={`${uri}-${index}`}
-                      className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition ${
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition ${
                         isCurrent ? "bg-white text-black" : "text-white/78 hover:bg-white/12 hover:text-white"
                       }`}
-                      type="button"
-                      onClick={() => onSelectQueueTrack(index)}
                     >
-                      {item?.imageUrl ? <img className="h-9 w-9 rounded object-cover" src={item.imageUrl} alt="" /> : <span className="h-9 w-9 rounded bg-white/12" />}
-                      <span className="min-w-0 flex-1">
+                      <button
+                        className="min-w-0 flex flex-1 items-center gap-3 text-left"
+                        type="button"
+                        onClick={() => onSelectQueueTrack(index)}
+                      >
+                        {item?.imageUrl ? <img className="h-9 w-9 rounded object-cover" src={item.imageUrl} alt="" /> : <span className="h-9 w-9 rounded bg-white/12" />}
+                        <span className="min-w-0 flex-1">
                         <span className="block truncate text-meta">{item?.name ?? `Track ${index + 1}`}</span>
                         <span className={`block truncate font-mono text-mono-sm ${isCurrent ? "text-black/58" : "text-white/55"}`}>
                           {item?.artists.join(", ") || uri.replace("spotify:track:", "")}
                         </span>
                       </span>
-                    </button>
+                      </button>
+                      <span className="grid shrink-0 grid-cols-2 gap-1">
+                        <button
+                          className={`rounded border p-1 transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                            isCurrent ? "border-black/20 hover:bg-black/10" : "border-white/18 hover:bg-white/12"
+                          }`}
+                          type="button"
+                          onClick={() => onMoveQueueTrack(index, -1)}
+                          disabled={index === 0}
+                          aria-label={`Move ${item?.name ?? `track ${index + 1}`} up`}
+                        >
+                          <ChevronUp className="h-4 w-4" strokeWidth={1.5} />
+                        </button>
+                        <button
+                          className={`rounded border p-1 transition disabled:cursor-not-allowed disabled:opacity-35 ${
+                            isCurrent ? "border-black/20 hover:bg-black/10" : "border-white/18 hover:bg-white/12"
+                          }`}
+                          type="button"
+                          onClick={() => onMoveQueueTrack(index, 1)}
+                          disabled={index === queueUris.length - 1}
+                          aria-label={`Move ${item?.name ?? `track ${index + 1}`} down`}
+                        >
+                          <ChevronDown className="h-4 w-4" strokeWidth={1.5} />
+                        </button>
+                      </span>
+                    </div>
                   );
                 })}
               </div>

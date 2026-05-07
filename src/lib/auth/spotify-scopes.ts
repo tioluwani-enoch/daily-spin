@@ -1,5 +1,6 @@
 export const SPOTIFY_SCOPES = [
   "user-library-read",
+  "user-library-modify",
   "user-read-recently-played",
   "user-top-read",
   "playlist-read-private",
@@ -12,5 +13,6 @@ export const SPOTIFY_SCOPES = [
   "user-read-currently-playing",
   "user-read-playback-state",
   "user-modify-playback-state",
+  "ugc-image-upload",
   "streaming"
 ].join(" ");

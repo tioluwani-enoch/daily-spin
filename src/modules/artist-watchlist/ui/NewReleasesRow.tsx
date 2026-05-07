@@ -7,7 +7,7 @@ import type { NewRelease } from "../types";
 export function NewReleasesRow({ releases }: { releases: NewRelease[] }) {
   return (
     <section>
-      <div className="mb-4 flex items-end justify-between gap-4">
+      <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <p className="font-mono text-mono-sm uppercase text-ambient-muted">New from your artists</p>
           <h2 className="mt-1 text-h2 text-ambient-fg">Watchlist drops from the last 14 days</h2>

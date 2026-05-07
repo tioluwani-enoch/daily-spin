@@ -11,7 +11,7 @@ export function SpotifyConnectButton() {
 
   if (status === "loading") {
     return (
-      <Button type="button" variant="quiet" disabled>
+      <Button type="button" variant="quiet" disabled className="w-full sm:w-auto">
         Checking Spotify
       </Button>
     );
@@ -19,7 +19,7 @@ export function SpotifyConnectButton() {
 
   if (session?.user) {
     return (
-      <Button type="button" variant="ghost" onClick={() => signOut({ callbackUrl: "/" })}>
+      <Button type="button" variant="ghost" onClick={() => signOut({ callbackUrl: "/" })} className="w-full sm:w-auto">
         <LogOut className="h-4 w-4" strokeWidth={1.5} />
         Disconnect {session.user.name ?? "Spotify"}
       </Button>
@@ -27,7 +27,7 @@ export function SpotifyConnectButton() {
   }
 
   return (
-    <Button type="button" variant="accent" onClick={() => signIn("spotify", { callbackUrl: "/" }, { scope: SPOTIFY_SCOPES, show_dialog: "true" })}>
+    <Button type="button" variant="accent" onClick={() => signIn("spotify", { callbackUrl: "/" }, { scope: SPOTIFY_SCOPES, show_dialog: "true" })} className="w-full sm:w-auto">
       <LogIn className="h-4 w-4" strokeWidth={1.5} />
       Connect Spotify
     </Button>

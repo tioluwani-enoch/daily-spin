@@ -16,7 +16,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Spotify is not connected" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { deviceId?: string; uri?: string; uris?: string[]; offset?: number };
+  const body = (await request.json()) as {
+    deviceId?: string;
+    uri?: string;
+    uris?: string[];
+    offset?: number;
+    positionMs?: number;
+    transfer?: boolean;
+  };
 
   const uris = body.uris && body.uris.length > 0 ? body.uris : body.uri ? [body.uri] : [];
 
@@ -35,9 +42,12 @@ export async function POST(request: NextRequest) {
     throw error;
   }
 
-  let transferResponse = await transferPlayback(tokens.accessToken, body.deviceId);
+  let transferResponse: Response | null = null;
+  if (body.transfer !== false) {
+    transferResponse = await transferPlayback(tokens.accessToken, body.deviceId);
+  }
 
-  if (transferResponse.status === 401) {
+  if (transferResponse?.status === 401) {
     try {
       tokens = await refreshTokenSet(tokens);
       transferResponse = await transferPlayback(tokens.accessToken, body.deviceId);
@@ -50,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (!transferResponse.ok && transferResponse.status !== 404) {
+  if (transferResponse && !transferResponse.ok && transferResponse.status !== 404) {
     return NextResponse.json(
       {
         error: "Spotify device transfer failed",
@@ -61,14 +71,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 700));
+  if (transferResponse) {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  }
 
-  let response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0);
+  let response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0, body.positionMs);
 
   if (response.status === 401) {
     try {
       tokens = await refreshTokenSet(tokens);
-      response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0);
+      response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0, body.positionMs);
     } catch (error) {
       if (error instanceof SpotifySessionError) {
         return NextResponse.json({ error: error.message }, { status: 401 });
@@ -79,8 +91,9 @@ export async function POST(request: NextRequest) {
   }
 
   if (response.status === 404) {
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0);
+    await transferPlayback(tokens.accessToken, body.deviceId);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    response = await playTrack(tokens.accessToken, body.deviceId, uris, body.offset ?? 0, body.positionMs);
   }
 
   if (!response.ok) {
@@ -111,19 +124,31 @@ function transferPlayback(accessToken: string, deviceId: string): Promise<Respon
   });
 }
 
-async function playTrack(accessToken: unknown, deviceId: string, uris: string[], offset: number): Promise<Response> {
+async function playTrack(accessToken: unknown, deviceId: string, uris: string[], offset: number, positionMs?: number): Promise<Response> {
+  const body: {
+    uris: string[];
+    offset: {
+      position: number;
+    };
+    position_ms?: number;
+  } = {
+    uris,
+    offset: {
+      position: Math.min(Math.max(0, offset), uris.length - 1)
+    }
+  };
+
+  if (typeof positionMs === "number" && positionMs > 0) {
+    body.position_ms = Math.floor(positionMs);
+  }
+
   return fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
     method: "PUT",
     headers: {
       authorization: `Bearer ${String(accessToken)}`,
       "content-type": "application/json"
     },
-    body: JSON.stringify({
-      uris,
-      offset: {
-        position: Math.min(Math.max(0, offset), uris.length - 1)
-      }
-    })
+    body: JSON.stringify(body)
   });
 }
 

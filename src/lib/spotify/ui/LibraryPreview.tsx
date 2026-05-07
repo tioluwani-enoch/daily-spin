@@ -49,7 +49,7 @@ export function LibraryPreview() {
           <p className="font-mono text-mono-sm uppercase text-ambient-muted">Spotify connection</p>
           <h2 className="mt-1 text-h2 text-ambient-fg">Check your saved tracks</h2>
         </div>
-        <Button type="button" variant="ghost" onClick={loadPreview} disabled={status === "loading"}>
+        <Button type="button" variant="ghost" onClick={loadPreview} disabled={status === "loading"} className="w-full sm:w-auto">
           <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
           {status === "loading" ? "Reading" : "Load preview"}
         </Button>
@@ -60,17 +60,18 @@ export function LibraryPreview() {
       {tracks.length > 0 ? (
         <div className="mt-5 grid gap-3">
           {tracks.map((track, index) => (
-            <div
-              key={track.id}
-              className="flex items-center gap-3 rounded-md border border-ambient-edge p-3 transition hover:border-ambient-accent"
-            >
-              {track.imageUrl ? <img className="h-12 w-12 rounded border border-ambient-edge object-cover" src={track.imageUrl} alt="" /> : null}
+            <div key={track.id} className="grid gap-3 rounded-md border border-ambient-edge p-3 transition hover:border-ambient-accent sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+              {track.imageUrl ? (
+                <img className="h-12 w-12 rounded border border-ambient-edge object-cover" src={track.imageUrl} alt="" />
+              ) : (
+                <span className="h-12 w-12 rounded border border-ambient-edge bg-ambient-alt" />
+              )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-meta text-ambient-fg">{track.name}</span>
                 <span className="block truncate font-mono text-mono-sm text-ambient-muted">{track.artists.join(", ")}</span>
               </span>
               <button
-                className="shrink-0 rounded-md border border-ambient-edge px-3 py-2 text-meta text-ambient-fg transition hover:border-ambient-accent"
+                className="w-full shrink-0 rounded-md border border-ambient-edge px-3 py-2 text-meta text-ambient-fg transition hover:border-ambient-accent sm:w-auto"
                 type="button"
                 onClick={(event) => {
                   event.preventDefault();

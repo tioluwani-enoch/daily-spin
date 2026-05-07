@@ -7,7 +7,7 @@ import type { MorningPick } from "../types";
 export function MorningPickPlayButton({ pick }: { pick: MorningPick }) {
   return (
     <button
-      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-ambient-accent px-3 py-2 text-meta text-white transition hover:bg-ambient-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ambient-accent"
+      className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-ambient-accent px-3 py-2 text-meta text-white transition hover:bg-ambient-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ambient-accent sm:w-auto"
       type="button"
       onClick={() => {
         window.dispatchEvent(

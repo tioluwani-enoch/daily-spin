@@ -34,7 +34,7 @@ export function PasteField() {
           setStatus("idle");
         }}
       />
-      <Button type="button" variant="accent" onClick={submitCapture}>
+      <Button type="button" variant="accent" onClick={submitCapture} className="w-full sm:w-auto">
         <Plus className="h-4 w-4" strokeWidth={1.5} />
         {status === "saved" ? "Saved" : "Capture"}
       </Button>

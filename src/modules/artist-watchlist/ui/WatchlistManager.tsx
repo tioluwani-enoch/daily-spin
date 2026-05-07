@@ -72,7 +72,7 @@ export function WatchlistManager() {
           <h2 className="mt-1 text-h2 text-ambient-fg">Choose who Daily Spin should watch</h2>
           <p className="mt-2 text-meta text-ambient-muted">Suggestions come from artists already in your synced saved tracks.</p>
         </div>
-        <Button type="button" variant="ghost" onClick={loadWatchlist} disabled={status === "loading" || status === "saving"}>
+        <Button type="button" variant="ghost" onClick={loadWatchlist} disabled={status === "loading" || status === "saving"} className="w-full sm:w-auto">
           <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
           Refresh
         </Button>
