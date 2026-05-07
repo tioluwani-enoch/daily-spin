@@ -71,6 +71,15 @@ input {
   border-radius: 999px;
 }
 
+.player-track-title {
+  display: -webkit-box;
+  max-height: 6.2rem;
+  overflow: hidden;
+  text-shadow: 0 1px 20px rgb(0 0 0 / 0.28);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 .wave-bars {
   display: flex;
   align-items: center;

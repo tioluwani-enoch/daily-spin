@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward, Volume2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ListMusic, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward, Volume2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 
 import { Button } from "@/lib/ui";
 
@@ -43,7 +43,6 @@ export function SpotifyWebPlayer() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const queueIndexRef = useRef(0);
-  const positionRef = useRef(0);
 
   useEffect(() => {
     queueUrisRef.current = queueUris;
@@ -52,10 +51,6 @@ export function SpotifyWebPlayer() {
   useEffect(() => {
     queueIndexRef.current = queueIndex;
   }, [queueIndex]);
-
-  useEffect(() => {
-    positionRef.current = position;
-  }, [position]);
 
   useEffect(() => {
     if (status !== "ready") {
@@ -256,14 +251,47 @@ export function SpotifyWebPlayer() {
     [deviceId, queueTracks, queueUris]
   );
 
+  const togglePlayback = useCallback(() => {
+    setIsPaused((paused) => !paused);
+    const togglePromise = playerRef.current?.togglePlay();
+    void togglePromise?.catch(() => {
+      setIsPaused((paused) => !paused);
+      setStatus("error");
+      setMessage("Spotify did not respond to that play command. Try again in a moment.");
+    });
+  }, []);
+
+  const previousTrack = useCallback(() => {
+    if (queueUris.length > 1) {
+      void playQueueIndex(queueIndex - 1);
+      return;
+    }
+
+    void playerRef.current?.previousTrack();
+  }, [playQueueIndex, queueIndex, queueUris.length]);
+
+  const nextTrack = useCallback(() => {
+    if (queueUris.length > 1) {
+      void playQueueIndex(queueIndex + 1);
+      return;
+    }
+
+    void playerRef.current?.nextTrack();
+  }, [playQueueIndex, queueIndex, queueUris.length]);
+
   const moveQueueTrack = useCallback(
-    async (fromIndex: number, direction: -1 | 1) => {
-      if (!deviceId || queueUris.length < 2) {
+    (fromIndex: number, direction: -1 | 1) => {
+      if (queueUris.length < 2) {
         return;
       }
 
       const toIndex = fromIndex + direction;
       if (toIndex < 0 || toIndex >= queueUris.length) {
+        return;
+      }
+
+      const currentIndex = queueIndexRef.current;
+      if (fromIndex === currentIndex || toIndex === currentIndex) {
         return;
       }
 
@@ -275,26 +303,8 @@ export function SpotifyWebPlayer() {
       setQueueUris(nextUris);
       setQueueTracks(nextTracks);
       setQueueIndex(nextCurrentIndex);
-
-      const response = await fetch("/api/spotify/play", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          deviceId,
-          uris: nextUris,
-          offset: nextCurrentIndex,
-          positionMs: positionRef.current,
-          transfer: false
-        })
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: string; status?: number };
-        setStatus("error");
-        setMessage(`${payload.error ?? "Queue reorder failed"}${payload.status ? ` (${payload.status})` : ""}. Try playing the track again so Daily Spin can rebuild the queue.`);
-      }
     },
-    [deviceId, queueTracks, queueUris]
+    [queueTracks, queueUris]
   );
 
   const miniArtUrl = currentTrack?.album.images[0]?.url ?? pendingTrack?.imageUrl ?? "";
@@ -326,9 +336,9 @@ export function SpotifyWebPlayer() {
           <PlayerControls
             isPaused={isPaused}
             isReady={status === "ready"}
-            onPrevious={() => (queueUris.length > 1 ? playQueueIndex(queueIndex - 1) : playerRef.current?.previousTrack())}
-            onToggle={() => playerRef.current?.togglePlay()}
-            onNext={() => (queueUris.length > 1 ? playQueueIndex(queueIndex + 1) : playerRef.current?.nextTrack())}
+            onPrevious={previousTrack}
+            onToggle={togglePlayback}
+            onNext={nextTrack}
             onExpand={() => setIsExpanded(true)}
             canExpand={Boolean(currentTrack)}
           />
@@ -350,9 +360,9 @@ export function SpotifyWebPlayer() {
           position={position}
           duration={duration}
           onClose={() => setIsExpanded(false)}
-          onPrevious={() => (queueUris.length > 1 ? playQueueIndex(queueIndex - 1) : playerRef.current?.previousTrack())}
-          onToggle={() => playerRef.current?.togglePlay()}
-          onNext={() => (queueUris.length > 1 ? playQueueIndex(queueIndex + 1) : playerRef.current?.nextTrack())}
+          onPrevious={previousTrack}
+          onToggle={togglePlayback}
+          onNext={nextTrack}
           onSelectQueueTrack={playQueueIndex}
           onMoveQueueTrack={moveQueueTrack}
         />
@@ -551,10 +561,40 @@ function NowPlayingModal({
   onSelectQueueTrack: (index: number) => void;
   onMoveQueueTrack: (index: number, direction: -1 | 1) => void;
 }) {
+  const [panel, setPanel] = useState<"now" | "queue">("now");
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
   const imageUrl = track?.album.images[0]?.url ?? pendingTrack?.imageUrl ?? "";
   const trackName = track?.name ?? pendingTrack?.name ?? "Preparing track";
   const artists = track ? track.artists.map((artist) => artist.name).join(", ") : pendingTrack?.artists?.join(", ") ?? "Spotify is connecting";
   const album = track?.album.name ?? pendingTrack?.album ?? "Daily Spin";
+  const hasQueue = queueUris.length > 1;
+
+  const handleTouchStart = (event: TouchEvent<HTMLElement>) => {
+    touchStartXRef.current = event.touches[0]?.clientX ?? null;
+    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchEnd = (event: TouchEvent<HTMLElement>) => {
+    const startX = touchStartXRef.current;
+    const startY = touchStartYRef.current;
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+
+    if (startX === null || startY === null || !hasQueue) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - startX;
+    const deltaY = touch.clientY - startY;
+
+    if (Math.abs(deltaX) < 54 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) {
+      return;
+    }
+
+    setPanel(deltaX < 0 ? "queue" : "now");
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/35 backdrop-blur-xl">
@@ -570,7 +610,11 @@ function NowPlayingModal({
         <WaveBars isPaused={isPaused} />
       </div>
 
-      <section className="absolute inset-x-3 top-1/2 flex max-h-[92dvh] -translate-y-1/2 flex-col overflow-y-auto rounded-lg border border-white/25 bg-white/18 p-4 text-white shadow-ambient backdrop-blur-2xl sm:left-1/2 sm:right-auto sm:w-[min(62rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:p-8">
+      <section
+        className="absolute inset-x-3 top-1/2 flex h-[min(92dvh,54rem)] -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-white/25 bg-white/18 p-4 text-white shadow-ambient backdrop-blur-2xl sm:left-1/2 sm:right-auto sm:w-[min(34rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:p-6"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div
           className="absolute inset-x-0 top-0 h-24 opacity-60 blur-2xl"
           style={{
@@ -578,51 +622,86 @@ function NowPlayingModal({
             backgroundSize: "cover"
           }}
         />
-        <div className="relative flex justify-end">
+        <div className="relative flex items-center justify-between gap-3">
+          <div className="flex rounded-md border border-white/20 bg-black/10 p-1">
+            <button
+              className={`rounded px-3 py-1.5 font-mono text-mono-sm uppercase transition ${panel === "now" ? "bg-white text-black" : "text-white/72 hover:text-white"}`}
+              type="button"
+              onClick={() => setPanel("now")}
+            >
+              Now
+            </button>
+            <button
+              className={`inline-flex items-center gap-2 rounded px-3 py-1.5 font-mono text-mono-sm uppercase transition disabled:opacity-40 ${
+                panel === "queue" ? "bg-white text-black" : "text-white/72 hover:text-white"
+              }`}
+              type="button"
+              onClick={() => setPanel("queue")}
+              disabled={!hasQueue}
+            >
+              <ListMusic className="h-4 w-4" strokeWidth={1.5} />
+              Up next
+            </button>
+          </div>
           <button className="rounded-md border border-white/30 p-2 text-white/85 transition hover:text-white" type="button" onClick={onClose} aria-label="Close player">
             <X className="h-5 w-5" strokeWidth={1.5} />
           </button>
         </div>
 
-        <div className="relative grid min-h-0 gap-7 lg:grid-cols-[minmax(0,1.08fr)_minmax(18rem,0.92fr)]">
-          <div className="min-w-0">
-            {imageUrl ? <img className="aspect-square w-full rounded-md border border-white/25 object-cover shadow-ambient sm:max-h-[42vh] lg:max-h-[48vh]" src={imageUrl} alt="" /> : null}
-            <div className="mt-5 sm:mt-7">
-              <p className="font-mono text-mono-sm uppercase text-white/70">Now playing</p>
-              <h2 className="mt-3 break-words text-h1 text-white sm:text-display">{trackName}</h2>
-              <p className="mt-2 break-words font-mono text-mono-sm text-white/72 sm:truncate">{artists}</p>
-              <p className="mt-1 break-words text-meta text-white/62 sm:truncate">{album}</p>
-              <div className="mt-5">
-                <ProgressBar position={position} duration={duration} />
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-[auto_1fr_auto_auto] items-center gap-3">
-              <button className="rounded-md border border-white/25 bg-white/10 p-3 transition hover:bg-white/18" type="button" onClick={onPrevious} aria-label="Previous track">
-                <SkipBack className="h-5 w-5" strokeWidth={1.5} />
-              </button>
-              <button className="inline-flex min-h-12 items-center gap-2 rounded-md bg-white px-5 text-meta text-black transition hover:bg-white/85" type="button" onClick={onToggle}>
-                {isPaused ? <Play className="h-5 w-5" strokeWidth={1.5} /> : <Pause className="h-5 w-5" strokeWidth={1.5} />}
-                {isPaused ? "Play" : "Pause"}
-              </button>
-              <button className="rounded-md border border-white/25 bg-white/10 p-3 transition hover:bg-white/18" type="button" onClick={onNext} aria-label="Next track">
-                <SkipForward className="h-5 w-5" strokeWidth={1.5} />
-              </button>
-              <button className="rounded-md border border-white/25 bg-white/10 p-3 transition hover:bg-white/18" type="button" onClick={onClose} aria-label="Minimize player">
-                <Minimize2 className="h-5 w-5" strokeWidth={1.5} />
-              </button>
-            </div>
-          </div>
-
-          {queueUris.length > 1 ? (
-            <aside className="min-h-0 rounded-md bg-black/10 p-3 lg:mt-12 lg:max-h-[64vh]">
-              <div className="flex items-end justify-between gap-3 px-1 pb-4">
-                <div>
-                  <p className="font-mono text-mono-sm uppercase text-white/62">Up next</p>
-                  <p className="mt-1 font-mono text-mono-sm text-white/42">{queueIndex + 1} of {queueUris.length}</p>
+        <div className="relative mt-4 min-h-0 flex-1 overflow-hidden">
+          <div className="flex h-full transition-transform duration-300 ease-out" style={{ transform: panel === "queue" ? "translateX(-100%)" : "translateX(0)" }}>
+            <div className="flex h-full min-w-full flex-col">
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {imageUrl ? (
+                  <img
+                    className="mx-auto aspect-square max-h-[42dvh] w-full rounded-md border border-white/25 object-cover shadow-ambient sm:max-h-[46dvh]"
+                    src={imageUrl}
+                    alt=""
+                  />
+                ) : null}
+                <div className="mt-4">
+                  <p className="font-mono text-mono-sm uppercase text-white/70">Now playing</p>
+                  <h2 className="player-track-title mt-2 break-words text-[clamp(1.75rem,7vw,2.75rem)] font-semibold leading-[1.08] text-white">{trackName}</h2>
+                  <p className="mt-3 break-words font-mono text-mono-sm text-white/78">{artists}</p>
+                  <p className="mt-1 break-words text-meta text-white/68">{album}</p>
                 </div>
               </div>
-              <div className="player-queue-scroll max-h-56 overflow-y-auto pr-1 lg:max-h-[calc(64vh-4.5rem)]">
+
+              <div className="shrink-0 pt-4">
+                <ProgressBar position={position} duration={duration} />
+                <div className="mt-4 grid grid-cols-[auto_1fr_auto_auto] items-center gap-3">
+                  <button className="rounded-md border border-white/25 bg-white/10 p-3 transition active:scale-95 hover:bg-white/18" type="button" onClick={onPrevious} aria-label="Previous track">
+                    <SkipBack className="h-5 w-5" strokeWidth={1.5} />
+                  </button>
+                  <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-white px-5 text-meta text-black transition active:scale-[0.98] hover:bg-white/85" type="button" onClick={onToggle}>
+                    {isPaused ? <Play className="h-5 w-5" strokeWidth={1.5} /> : <Pause className="h-5 w-5" strokeWidth={1.5} />}
+                    {isPaused ? "Play" : "Pause"}
+                  </button>
+                  <button className="rounded-md border border-white/25 bg-white/10 p-3 transition active:scale-95 hover:bg-white/18" type="button" onClick={onNext} aria-label="Next track">
+                    <SkipForward className="h-5 w-5" strokeWidth={1.5} />
+                  </button>
+                  <button className="rounded-md border border-white/25 bg-white/10 p-3 transition active:scale-95 hover:bg-white/18" type="button" onClick={onClose} aria-label="Minimize player">
+                    <Minimize2 className="h-5 w-5" strokeWidth={1.5} />
+                  </button>
+                </div>
+                {hasQueue ? (
+                  <button className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border border-white/20 bg-black/10 px-4 py-2 font-mono text-mono-sm uppercase text-white/78 transition hover:bg-white/12 hover:text-white" type="button" onClick={() => setPanel("queue")}>
+                    Swipe left for up next
+                    <ChevronRight className="h-4 w-4" strokeWidth={1.5} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <aside className="flex h-full min-w-full flex-col pl-0">
+              <div className="flex items-center justify-between gap-3 pb-4">
+                <button className="inline-flex items-center gap-2 rounded-md border border-white/20 bg-black/10 px-3 py-2 font-mono text-mono-sm uppercase text-white/78 transition hover:bg-white/12 hover:text-white" type="button" onClick={() => setPanel("now")}>
+                  <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+                  Now playing
+                </button>
+                <p className="font-mono text-mono-sm text-white/52">{queueIndex + 1} of {queueUris.length}</p>
+              </div>
+              <div className="player-queue-scroll min-h-0 flex-1 overflow-y-auto pr-1">
                 {queueUris.map((uri, index) => {
                   const item = queueTracks[index];
                   const isCurrent = index === queueIndex;
@@ -641,11 +720,11 @@ function NowPlayingModal({
                       >
                         {item?.imageUrl ? <img className="h-9 w-9 rounded object-cover" src={item.imageUrl} alt="" /> : <span className="h-9 w-9 rounded bg-white/12" />}
                         <span className="min-w-0 flex-1">
-                        <span className="block truncate text-meta">{item?.name ?? `Track ${index + 1}`}</span>
-                        <span className={`block truncate font-mono text-mono-sm ${isCurrent ? "text-black/58" : "text-white/55"}`}>
-                          {item?.artists.join(", ") || uri.replace("spotify:track:", "")}
+                          <span className="block truncate text-meta">{item?.name ?? `Track ${index + 1}`}</span>
+                          <span className={`block truncate font-mono text-mono-sm ${isCurrent ? "text-black/58" : "text-white/55"}`}>
+                            {item?.artists.join(", ") || uri.replace("spotify:track:", "")}
+                          </span>
                         </span>
-                      </span>
                       </button>
                       <span className="grid shrink-0 grid-cols-2 gap-1">
                         <button
@@ -654,7 +733,7 @@ function NowPlayingModal({
                           }`}
                           type="button"
                           onClick={() => onMoveQueueTrack(index, -1)}
-                          disabled={index === 0}
+                          disabled={index === 0 || index === queueIndex || index - 1 === queueIndex}
                           aria-label={`Move ${item?.name ?? `track ${index + 1}`} up`}
                         >
                           <ChevronUp className="h-4 w-4" strokeWidth={1.5} />
@@ -665,7 +744,7 @@ function NowPlayingModal({
                           }`}
                           type="button"
                           onClick={() => onMoveQueueTrack(index, 1)}
-                          disabled={index === queueUris.length - 1}
+                          disabled={index === queueUris.length - 1 || index === queueIndex || index + 1 === queueIndex}
                           aria-label={`Move ${item?.name ?? `track ${index + 1}`} down`}
                         >
                           <ChevronDown className="h-4 w-4" strokeWidth={1.5} />
@@ -676,7 +755,7 @@ function NowPlayingModal({
                 })}
               </div>
             </aside>
-          ) : null}
+          </div>
         </div>
       </section>
     </div>

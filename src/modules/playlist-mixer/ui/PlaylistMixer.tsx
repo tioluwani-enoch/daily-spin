@@ -1,6 +1,6 @@
 "use client";
 
-import { ListMusic, Play, Save, Sparkles } from "lucide-react";
+import { Heart, ListMusic, Play, Save, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button, Input } from "@/lib/ui";
@@ -19,6 +19,8 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
   const [saveDescription, setSaveDescription] = useState("");
   const [coverImageBase64, setCoverImageBase64] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [likedTrackIds, setLikedTrackIds] = useState<Set<string>>(new Set());
+  const [likingTrackIds, setLikingTrackIds] = useState<Set<string>>(new Set());
 
   const sourceOptions = useMemo(() => sources.filter((source) => source.trackCount > 0), [sources]);
 
@@ -39,6 +41,8 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
       setSaveTitle(payload.mix.title);
       setSaveDescription(payload.mix.description);
       setCoverImageBase64(null);
+      setLikedTrackIds(new Set(payload.mix.tracks.filter((track: GeneratedPlaylistMix["tracks"][number]) => track.source === "library").map((track: GeneratedPlaylistMix["tracks"][number]) => track.id)));
+      setLikingTrackIds(new Set());
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not generate a playlist");
     } finally {
@@ -94,6 +98,33 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
         }
       })
     );
+  }
+
+  async function likeTrack(trackId: string) {
+    if (likedTrackIds.has(trackId) || likingTrackIds.has(trackId)) {
+      return;
+    }
+
+    setNotice(null);
+    setLikingTrackIds((ids) => new Set(ids).add(trackId));
+
+    try {
+      const response = await fetch("/api/spotify/liked-track", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trackId })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not add this track to Liked Songs");
+      }
+      setLikedTrackIds((ids) => new Set(ids).add(trackId));
+      setNotice("Added to Liked Songs.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not add this track to Liked Songs");
+    } finally {
+      setLikingTrackIds((ids) => removeSetValue(ids, trackId));
+    }
   }
 
   async function chooseCover(file: File | null) {
@@ -226,6 +257,17 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-2 sm:col-start-2 md:col-start-auto md:justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => void likeTrack(track.id)}
+                      disabled={likedTrackIds.has(track.id) || likingTrackIds.has(track.id)}
+                      className={`min-h-9 px-2 ${likedTrackIds.has(track.id) ? "border-ambient-accent bg-ambient-accent/10 text-ambient-accent" : ""}`}
+                      aria-label={`${likedTrackIds.has(track.id) ? "Added" : "Add"} ${track.name} to Liked Songs`}
+                      title={likedTrackIds.has(track.id) ? "Added to Liked Songs" : "Add to Liked Songs"}
+                    >
+                      <Heart size={15} aria-hidden fill={likedTrackIds.has(track.id) ? "currentColor" : "none"} />
+                    </Button>
                     <Button type="button" variant="ghost" onClick={() => playMix(index)} className="min-h-9 px-2">
                       <Play size={15} aria-hidden />
                     </Button>
@@ -243,6 +285,12 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
       ) : null}
     </section>
   );
+}
+
+function removeSetValue<T>(values: Set<T>, value: T): Set<T> {
+  const nextValues = new Set(values);
+  nextValues.delete(value);
+  return nextValues;
 }
 
 async function fileToSpotifyCoverBase64(file: File): Promise<string> {
