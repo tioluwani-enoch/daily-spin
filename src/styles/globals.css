@@ -80,6 +80,49 @@ input {
   -webkit-line-clamp: 3;
 }
 
+@media (orientation: landscape) and (max-height: 720px) and (min-width: 640px) {
+  .player-modal-shell {
+    width: min(88vw, 58rem) !important;
+    height: min(88dvh, 34rem) !important;
+    padding: 1rem !important;
+  }
+
+  .player-now-panel {
+    display: grid;
+    grid-template-columns: minmax(13rem, 0.92fr) minmax(16rem, 1fr);
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .player-now-content {
+    display: contents;
+  }
+
+  .player-artwork {
+    align-self: center;
+    width: min(42vw, calc(88dvh - 6.5rem));
+    max-height: calc(88dvh - 6.5rem) !important;
+  }
+
+  .player-track-copy {
+    min-height: 0;
+    margin-top: 0;
+    align-self: end;
+  }
+
+  .player-track-title {
+    max-height: 5.6rem;
+    font-size: clamp(1.5rem, 4.2vw, 2.45rem) !important;
+    -webkit-line-clamp: 2;
+  }
+
+  .player-controls-zone {
+    grid-column: 2;
+    padding-top: 0.75rem;
+    align-self: end;
+  }
+}
+
 .player-visual-root {
   --player-beat-ms: 625ms;
   --player-slow-beat-ms: 1250ms;

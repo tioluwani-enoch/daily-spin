@@ -710,16 +710,16 @@ function NowPlayingModal({
 
         <div className="relative mt-4 min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full transition-transform duration-300 ease-out" style={{ transform: panel === "queue" ? "translateX(-100%)" : "translateX(0)" }}>
-            <div className="flex h-full min-w-full flex-col">
-              <div className="min-h-0 flex-1 overflow-hidden">
+            <div className="player-now-panel flex h-full min-w-full flex-col">
+              <div className="player-now-content min-h-0 flex-1 overflow-hidden">
                 {imageUrl ? (
                   <img
-                    className="mx-auto aspect-square max-h-[42dvh] w-full rounded-md border border-white/25 object-cover shadow-ambient sm:max-h-[46dvh]"
+                    className="player-artwork mx-auto aspect-square max-h-[42dvh] w-full rounded-md border border-white/25 object-cover shadow-ambient sm:max-h-[46dvh]"
                     src={imageUrl}
                     alt=""
                   />
                 ) : null}
-                <div className="mt-4">
+                <div className="player-track-copy mt-4">
                   <p className="font-mono text-mono-sm uppercase text-white/70">Now playing</p>
                   <h2 className="player-track-title mt-2 break-words text-[clamp(1.75rem,7vw,2.75rem)] font-semibold leading-[1.08] text-white">{trackName}</h2>
                   <p className="mt-3 break-words font-mono text-mono-sm text-white/78">{artists}</p>
@@ -727,7 +727,7 @@ function NowPlayingModal({
                 </div>
               </div>
 
-              <div className="shrink-0 pt-4">
+              <div className="player-controls-zone shrink-0 pt-4">
                 <ProgressBar position={position} duration={duration} />
                 <div className="mt-4 grid grid-cols-[auto_1fr_auto_auto] items-center gap-3">
                   <button className="rounded-md border border-white/25 bg-white/10 p-3 transition active:scale-95 hover:bg-white/18" type="button" onClick={onPrevious} aria-label="Previous track">
