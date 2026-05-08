@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ListMusic, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward, Volume2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type TouchEvent } from "react";
 
 import { Button } from "@/lib/ui";
 
@@ -10,11 +10,13 @@ type PlayerStatus = "idle" | "loading" | "ready" | "error";
 type PlayTrackPayload = {
   uri: string;
   queueUris?: string[];
+  queueTracks?: QueueTrack[];
   queueIndex?: number;
   name?: string;
   artists?: string[];
   album?: string;
   imageUrl?: string | null;
+  audioFeatures?: PlayerAudioFeatures | null;
 };
 
 type PlayTrackEvent = CustomEvent<PlayTrackPayload>;
@@ -25,6 +27,13 @@ type QueueTrack = {
   artists: string[];
   album: string;
   imageUrl: string | null;
+  audioFeatures?: PlayerAudioFeatures | null;
+};
+
+type PlayerAudioFeatures = {
+  energy: number;
+  valence?: number;
+  tempo: number;
 };
 
 export function SpotifyWebPlayer() {
@@ -308,6 +317,7 @@ export function SpotifyWebPlayer() {
   );
 
   const miniArtUrl = currentTrack?.album.images[0]?.url ?? pendingTrack?.imageUrl ?? "";
+  const motion = getPlayerMotion(queueTracks[queueIndex]?.audioFeatures ?? pendingTrack?.audioFeatures ?? null);
 
   return (
     <>
@@ -359,6 +369,7 @@ export function SpotifyWebPlayer() {
           queueIndex={queueIndex}
           position={position}
           duration={duration}
+          motion={motion}
           onClose={() => setIsExpanded(false)}
           onPrevious={previousTrack}
           onToggle={togglePlayback}
@@ -378,14 +389,17 @@ async function resolvePlaybackQueue(payload: PlayTrackPayload): Promise<{
   pendingTrack: PlayTrackPayload;
 }> {
   if (payload.queueUris && payload.queueUris.length > 1) {
-    const shuffledUris = shuffleQueueAroundCurrent(payload.queueUris, payload.uri);
+    const metadataByUri = new Map((payload.queueTracks ?? []).map((track) => [track.uri, track]));
+    const shouldPreserveOrder = metadataByUri.size > 0;
+    const resolvedUris = shouldPreserveOrder ? queueAroundCurrent(payload.queueUris, payload.uri) : shuffleQueueAroundCurrent(payload.queueUris, payload.uri);
+
     return {
-      uris: shuffledUris,
-      index: Math.max(0, shuffledUris.findIndex((uri) => uri === payload.uri)),
-      tracks: shuffledUris.map((uri, index) =>
+      uris: resolvedUris,
+      index: Math.max(0, resolvedUris.findIndex((uri) => uri === payload.uri)),
+      tracks: resolvedUris.map((uri, index) =>
         uri === payload.uri
           ? payloadToQueueTrack(payload)
-          : {
+          : metadataByUri.get(uri) ?? {
               uri,
               name: `Track ${index + 1}`,
               artists: [],
@@ -443,13 +457,23 @@ function shuffleQueueAroundCurrent(values: string[], currentUri: string): string
   return current ? [current, ...rest] : rest;
 }
 
+function queueAroundCurrent(values: string[], currentUri: string): string[] {
+  const currentIndex = values.findIndex((uri) => uri === currentUri);
+  if (currentIndex <= 0) {
+    return values;
+  }
+
+  return [...values.slice(currentIndex), ...values.slice(0, currentIndex)];
+}
+
 function payloadToQueueTrack(payload: PlayTrackPayload): QueueTrack {
   return {
     uri: payload.uri,
     name: payload.name ?? "Daily Spin track",
     artists: payload.artists ?? [],
     album: payload.album ?? "Daily Spin",
-    imageUrl: payload.imageUrl ?? null
+    imageUrl: payload.imageUrl ?? null,
+    audioFeatures: payload.audioFeatures ?? null
   };
 }
 
@@ -459,8 +483,30 @@ function queueTrackToPayload(track: QueueTrack): PlayTrackPayload {
     name: track.name,
     artists: track.artists,
     album: track.album,
-    imageUrl: track.imageUrl
+    imageUrl: track.imageUrl,
+    audioFeatures: track.audioFeatures ?? null
   };
+}
+
+type PlayerMotion = {
+  beatMs: number;
+  energy: number;
+  valence: number;
+};
+
+function getPlayerMotion(features: PlayerAudioFeatures | null): PlayerMotion {
+  const tempo = features?.tempo && features.tempo > 0 ? features.tempo : 96;
+  const beatMs = Math.round(Math.min(900, Math.max(360, 60_000 / tempo)));
+
+  return {
+    beatMs,
+    energy: clamp01(features?.energy ?? 0.55),
+    valence: clamp01(features?.valence ?? 0.5)
+  };
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
 }
 
 function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
@@ -539,6 +585,7 @@ function NowPlayingModal({
   queueIndex,
   position,
   duration,
+  motion,
   onClose,
   onPrevious,
   onToggle,
@@ -554,6 +601,7 @@ function NowPlayingModal({
   queueIndex: number;
   position: number;
   duration: number;
+  motion: PlayerMotion;
   onClose: () => void;
   onPrevious: () => void;
   onToggle: () => void;
@@ -569,6 +617,17 @@ function NowPlayingModal({
   const artists = track ? track.artists.map((artist) => artist.name).join(", ") : pendingTrack?.artists?.join(", ") ?? "Spotify is connecting";
   const album = track?.album.name ?? pendingTrack?.album ?? "Daily Spin";
   const hasQueue = queueUris.length > 1;
+  const visualStyle = {
+    "--player-beat-ms": `${motion.beatMs}ms`,
+    "--player-slow-beat-ms": `${motion.beatMs * 2}ms`,
+    "--player-energy": motion.energy,
+    "--player-valence": motion.valence,
+    "--player-glow-low": 0.42 + motion.energy * 0.18,
+    "--player-glow-high": 0.62 + motion.energy * 0.28,
+    "--player-glow-scale": 0.98 + motion.energy * 0.08,
+    "--player-shell-glow-size": `${4 + motion.energy * 3}rem`,
+    "--player-shell-glow-opacity": 0.12 + motion.energy * 0.1
+  } as CSSProperties;
 
   const handleTouchStart = (event: TouchEvent<HTMLElement>) => {
     touchStartXRef.current = event.touches[0]?.clientX ?? null;
@@ -597,7 +656,7 @@ function NowPlayingModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/35 backdrop-blur-xl">
+    <div className="player-visual-root fixed inset-0 z-50 overflow-hidden bg-black/35 backdrop-blur-xl" style={visualStyle}>
       <div
         className="absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-3xl"
         style={{
@@ -605,13 +664,14 @@ function NowPlayingModal({
         }}
       />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.24),rgba(31,27,23,0.74))]" />
+      <div className={`player-beat-glow ${isPaused ? "player-beat-glow-paused" : ""}`} />
 
       <div className="absolute inset-x-0 top-[38%] -translate-y-1/2 pointer-events-none">
-        <WaveBars isPaused={isPaused} />
+        <WaveBars isPaused={isPaused} motion={motion} />
       </div>
 
       <section
-        className="absolute inset-x-3 top-1/2 flex h-[min(92dvh,54rem)] -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-white/25 bg-white/18 p-4 text-white shadow-ambient backdrop-blur-2xl sm:left-1/2 sm:right-auto sm:w-[min(34rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:p-6"
+        className="player-modal-shell absolute inset-x-3 top-1/2 flex h-[min(92dvh,54rem)] -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-white/25 bg-white/18 p-4 text-white shadow-ambient backdrop-blur-2xl sm:left-1/2 sm:right-auto sm:w-[min(34rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:p-6"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -762,12 +822,29 @@ function NowPlayingModal({
   );
 }
 
-function WaveBars({ isPaused }: { isPaused: boolean }) {
+function WaveBars({ isPaused, motion }: { isPaused: boolean; motion: PlayerMotion }) {
   return (
     <span className={`wave-bars ${isPaused ? "wave-bars-paused" : ""}`} aria-hidden="true">
-      {Array.from({ length: 100 }).map((_, index) => (
-        <span key={index} style={{ animationDelay: `-${index * 24}ms` }} />
+      {Array.from({ length: 120 }).map((_, index) => (
+        <span key={index} style={getWaveBarStyle(index, motion)} />
       ))}
     </span>
   );
+}
+
+function getWaveBarStyle(index: number, motion: PlayerMotion): CSSProperties {
+  const centerDistance = Math.abs(index - 59.5) / 59.5;
+  const envelope = 1 - centerDistance ** 1.65;
+  const ripple = (Math.sin(index * 0.42) + 1) / 2;
+  const base = 0.18 + envelope * 0.42 + ripple * 0.12;
+  const peak = base + motion.energy * (0.42 + envelope * 0.46);
+
+  return {
+    "--bar-rest": (base * 0.72).toFixed(3),
+    "--bar-mid": Math.min(1, base + motion.energy * 0.12).toFixed(3),
+    "--bar-peak": Math.min(1, peak).toFixed(3),
+    "--bar-paused": (base * 0.45).toFixed(3),
+    "--bar-opacity": (0.18 + Math.min(1, peak) * 0.58).toFixed(3),
+    animationDelay: `-${Math.round(index * motion.beatMs * 0.026)}ms`
+  } as CSSProperties;
 }

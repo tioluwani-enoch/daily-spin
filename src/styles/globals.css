@@ -80,37 +80,114 @@ input {
   -webkit-line-clamp: 3;
 }
 
+.player-visual-root {
+  --player-beat-ms: 625ms;
+  --player-slow-beat-ms: 1250ms;
+  --player-energy: 0.55;
+  --player-valence: 0.5;
+  --player-glow-low: 0.52;
+  --player-glow-high: 0.76;
+  --player-glow-scale: 1.03;
+  --player-shell-glow-size: 5.5rem;
+  --player-shell-glow-opacity: 0.18;
+}
+
+.player-beat-glow {
+  position: absolute;
+  inset: 12% 18%;
+  pointer-events: none;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 52%, rgb(255 255 255 / 0.62), rgb(255 255 255 / 0.24) 28%, transparent 62%),
+    radial-gradient(circle at 44% 44%, rgb(122 98 68 / 0.24), transparent 58%);
+  filter: blur(2.25rem);
+  opacity: var(--player-glow-low);
+  transform: scale(0.94);
+  animation: player-glow-pulse var(--player-beat-ms) ease-out infinite;
+}
+
+.player-beat-glow-paused {
+  animation-play-state: paused;
+  opacity: 0.42;
+  transform: scale(0.96);
+}
+
+.player-modal-shell {
+  animation: player-shell-pulse var(--player-slow-beat-ms) ease-in-out infinite;
+}
+
 .wave-bars {
   display: flex;
   align-items: center;
-  gap: 0.1rem;
+  gap: 0.12rem;
   width: 100%;
-  height: 12rem;
+  height: 11rem;
+  padding-inline: 0.15rem;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 1.4rem rgb(255 255 255 / 0.34));
 }
 
 .wave-bars span {
   flex: 1;
   min-width: 0;
-  height: 0.2rem;
+  height: 100%;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.55);
-  animation: wave-rise 2400ms linear infinite;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.86), rgb(255 255 255 / 0.34));
+  opacity: var(--bar-opacity);
+  transform: scaleY(var(--bar-rest));
+  transform-origin: center;
+  animation: wave-beat var(--player-beat-ms) cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
 }
 
 .wave-bars-paused span {
   animation-play-state: paused;
-  opacity: 0.18;
-  height: 0.2rem;
+  opacity: 0.2;
+  transform: scaleY(var(--bar-paused));
 }
 
-@keyframes wave-rise {
-  0%   { height: 0.5rem;  opacity: 0.3; }
-  15%  { height: 6rem;    opacity: 0.55; }
-  25%  { height: 12rem;   opacity: 0.75; }
-  50%  { height: 0.5rem;  opacity: 0.3; }
-  65%  { height: 6rem;    opacity: 0.55; }
-  75%  { height: 12rem;   opacity: 0.75; }
-  100% { height: 0.5rem;  opacity: 0.3; }
+@keyframes player-glow-pulse {
+  0% {
+    opacity: var(--player-glow-low);
+    transform: scale(0.94);
+  }
+  18% {
+    opacity: var(--player-glow-high);
+    transform: scale(var(--player-glow-scale));
+  }
+  100% {
+    opacity: var(--player-glow-low);
+    transform: scale(0.94);
+  }
+}
+
+@keyframes player-shell-pulse {
+  0%,
+  100% {
+    box-shadow: 0 24px 80px rgb(31 27 23 / 0.08), 0 0 4rem rgb(255 255 255 / 0.1);
+  }
+  50% {
+    box-shadow:
+      0 24px 80px rgb(31 27 23 / 0.1),
+      0 0 var(--player-shell-glow-size) rgb(255 255 255 / var(--player-shell-glow-opacity));
+  }
+}
+
+@keyframes wave-beat {
+  0% {
+    transform: scaleY(var(--bar-rest));
+  }
+  16% {
+    transform: scaleY(var(--bar-peak));
+  }
+  36% {
+    transform: scaleY(var(--bar-mid));
+  }
+  62% {
+    transform: scaleY(var(--bar-rest));
+  }
+  100% {
+    transform: scaleY(var(--bar-rest));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -120,5 +197,11 @@ input {
     animation-duration: 1ms !important;
     scroll-behavior: auto !important;
     transition-duration: 1ms !important;
+  }
+
+  .player-beat-glow,
+  .player-modal-shell,
+  .wave-bars span {
+    animation: none !important;
   }
 }

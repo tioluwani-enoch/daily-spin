@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
+import { Analytics } from "@vercel/analytics/next";
 
 import { AuthProvider } from "@/lib/auth/ui/AuthProvider";
 import { DailySpinLogo } from "@/lib/brand/DailySpinLogo";
@@ -72,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SpotifyWebPlayer />
           </div>
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );

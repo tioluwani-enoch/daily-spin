@@ -7,6 +7,9 @@ import { getServerEnv } from "@/lib/env/server";
 import { getUsableSpotifyTokens, refreshTokenSet, SpotifySessionError } from "@/lib/spotify/auth";
 import { SpotifyApiError, spotifyFetch } from "@/lib/spotify/sync/spotify-api";
 
+const PLAYLIST_SCOPE = "playlist-modify-private";
+const LIKED_SCOPE = "user-library-modify";
+
 const requestSchema = z.object({
   title: z.string().min(1).max(100),
   description: z.string().max(300).optional(),
@@ -26,6 +29,17 @@ type SpotifyPlaylistCreateResponse = {
     spotify?: string;
   };
 };
+
+class SpotifySaveMixError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly details?: unknown
+  ) {
+    super(message);
+    this.name = "SpotifySaveMixError";
+  }
+}
 
 export async function POST(request: NextRequest) {
   const env = getServerEnv();
@@ -47,11 +61,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Choose at least one save option" }, { status: 400 });
   }
 
+  const missingScopes = getMissingScopes(token.spotifyScopes, body.data);
+  if (missingScopes.length > 0) {
+    return NextResponse.json(
+      {
+        error: "Spotify needs to be reconnected before Daily Spin can save playlists or Liked Songs.",
+        requiredScopes: missingScopes
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     let tokens = await getUsableSpotifyTokens(token);
     try {
       return await saveMix(tokens.accessToken, body.data);
     } catch (error) {
+      if (error instanceof SpotifyApiError && error.status === 403) {
+        throw new SpotifySaveMixError("Spotify needs to be reconnected before Daily Spin can save playlists or Liked Songs.", 403);
+      }
+
       if (!(error instanceof SpotifyApiError) || error.status !== 401) {
         throw error;
       }
@@ -65,6 +94,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
 
+    if (error instanceof SpotifySaveMixError) {
+      return NextResponse.json({ error: error.message, details: error.details }, { status: error.status });
+    }
+
+    console.error(error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save playlist mix" }, { status: 500 });
   }
 }
@@ -94,7 +128,7 @@ async function saveMix(accessToken: string, body: z.infer<typeof requestSchema>)
 }
 
 async function createPlaylist(accessToken: string, userId: string, title: string, description: string): Promise<SpotifyPlaylistCreateResponse> {
-  const response = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+  const response = await fetch("https://api.spotify.com/v1/me/playlists", {
     method: "POST",
     headers: {
       authorization: `Bearer ${accessToken}`,
@@ -109,7 +143,7 @@ async function createPlaylist(accessToken: string, userId: string, title: string
   });
 
   if (!response.ok) {
-    throw new Error(`Spotify playlist create failed (${response.status}): ${JSON.stringify(await getSpotifyErrorDetails(response))}`);
+    throw await createSpotifySaveMixError(response, "Spotify playlist create failed");
   }
 
   return (await response.json()) as SpotifyPlaylistCreateResponse;
@@ -117,7 +151,7 @@ async function createPlaylist(accessToken: string, userId: string, title: string
 
 async function addTracksToPlaylist(accessToken: string, playlistId: string, trackIds: string[]): Promise<void> {
   for (const chunk of chunkArray(trackIds, 100)) {
-    await spotifyFetch(accessToken, `https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+    await spotifyFetch(accessToken, `https://api.spotify.com/v1/playlists/${playlistId}/items`, {
       method: "POST",
       headers: {
         "content-type": "application/json"
@@ -131,7 +165,10 @@ async function addTracksToPlaylist(accessToken: string, playlistId: string, trac
 
 async function addTracksToLikedSongs(accessToken: string, trackIds: string[]): Promise<void> {
   for (const chunk of chunkArray(trackIds, 50)) {
-    const response = await fetch(`https://api.spotify.com/v1/me/tracks?ids=${chunk.join(",")}`, {
+    const params = new URLSearchParams({
+      uris: chunk.map((id) => `spotify:track:${id}`).join(",")
+    });
+    const response = await fetch(`https://api.spotify.com/v1/me/library?${params.toString()}`, {
       method: "PUT",
       headers: {
         authorization: `Bearer ${accessToken}`
@@ -140,7 +177,7 @@ async function addTracksToLikedSongs(accessToken: string, trackIds: string[]): P
     });
 
     if (!response.ok) {
-      throw new SpotifyApiError("Spotify liked songs save failed", response.status);
+      throw await createSpotifySaveMixError(response, "Spotify liked songs save failed");
     }
   }
 }
@@ -157,8 +194,29 @@ async function uploadPlaylistCover(accessToken: string, playlistId: string, cove
   });
 
   if (!response.ok) {
-    throw new Error(`Spotify playlist cover upload failed (${response.status}): ${JSON.stringify(await getSpotifyErrorDetails(response))}`);
+    throw await createSpotifySaveMixError(response, "Spotify playlist cover upload failed");
   }
+}
+
+function getMissingScopes(rawScopes: unknown, body: z.infer<typeof requestSchema>): string[] {
+  const scopes = typeof rawScopes === "string" ? rawScopes.split(" ") : [];
+  if (scopes.length === 0) {
+    return [];
+  }
+
+  const requiredScopes = [
+    body.saveAsPlaylist ? PLAYLIST_SCOPE : null,
+    body.addToLiked ? LIKED_SCOPE : null
+  ].filter((scope): scope is string => Boolean(scope));
+
+  return requiredScopes.filter((scope) => !scopes.includes(scope));
+}
+
+async function createSpotifySaveMixError(response: Response, fallback: string): Promise<SpotifySaveMixError> {
+  const details = await getSpotifyErrorDetails(response);
+  const message = response.status === 403 ? "Spotify needs to be reconnected before Daily Spin can save playlists or Liked Songs." : `${fallback} (${response.status})`;
+
+  return new SpotifySaveMixError(message, response.status, details);
 }
 
 async function getSpotifyErrorDetails(response: Response): Promise<unknown> {

@@ -3,6 +3,7 @@
 import { Heart, ListMusic, Play, Save, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { reconnectSpotify } from "@/lib/auth/ui/SpotifyConnectButton";
 import { Button, Input } from "@/lib/ui";
 
 import type { GeneratedPlaylistMix, PlaylistMixSource } from "../types";
@@ -19,6 +20,7 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
   const [saveDescription, setSaveDescription] = useState("");
   const [coverImageBase64, setCoverImageBase64] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [needsSpotifyReconnect, setNeedsSpotifyReconnect] = useState(false);
   const [likedTrackIds, setLikedTrackIds] = useState<Set<string>>(new Set());
   const [likingTrackIds, setLikingTrackIds] = useState<Set<string>>(new Set());
 
@@ -27,6 +29,7 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
   async function generateMix() {
     setIsGenerating(true);
     setNotice(null);
+    setNeedsSpotifyReconnect(false);
     try {
       const response = await fetch("/api/playlist-mixer/generate", {
         method: "POST",
@@ -54,6 +57,7 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
     if (!mix) return;
     setIsSaving(true);
     setNotice(null);
+    setNeedsSpotifyReconnect(false);
     try {
       const response = await fetch("/api/playlist-mixer/save", {
         method: "POST",
@@ -69,6 +73,7 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
       });
       const payload = await response.json();
       if (!response.ok) {
+        setNeedsSpotifyReconnect(isReconnectPayload(payload));
         throw new Error(payload.error ?? "Could not save this mix");
       }
       setNotice(payload.playlist?.external_urls?.spotify ? "Saved to Spotify." : "Saved to Liked Songs.");
@@ -90,11 +95,32 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
         detail: {
           uri: track.uri,
           queueUris: mix.tracks.map((item) => item.uri),
+          queueTracks: mix.tracks.map((item) => ({
+            uri: item.uri,
+            name: item.name,
+            artists: item.artists,
+            album: item.albumName,
+            imageUrl: item.imageUrl,
+            audioFeatures: item.audioFeatures
+              ? {
+                  energy: item.audioFeatures.energy,
+                  valence: item.audioFeatures.valence,
+                  tempo: item.audioFeatures.tempo
+                }
+              : null
+          })),
           queueIndex: startIndex,
           name: track.name,
           artists: track.artists,
           album: track.albumName,
-          imageUrl: track.imageUrl
+          imageUrl: track.imageUrl,
+          audioFeatures: track.audioFeatures
+            ? {
+                energy: track.audioFeatures.energy,
+                valence: track.audioFeatures.valence,
+                tempo: track.audioFeatures.tempo
+              }
+            : null
         }
       })
     );
@@ -106,6 +132,7 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
     }
 
     setNotice(null);
+    setNeedsSpotifyReconnect(false);
     setLikingTrackIds((ids) => new Set(ids).add(trackId));
 
     try {
@@ -116,6 +143,7 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
       });
       const payload = await response.json();
       if (!response.ok) {
+        setNeedsSpotifyReconnect(isReconnectPayload(payload));
         throw new Error(payload.error ?? "Could not add this track to Liked Songs");
       }
       setLikedTrackIds((ids) => new Set(ids).add(trackId));
@@ -168,7 +196,16 @@ export function PlaylistMixer({ sources }: { sources: PlaylistMixSource[] }) {
             {isGenerating ? "Creating" : "Create mix"}
           </Button>
         </div>
-        {notice ? <p className="mt-4 text-meta text-ambient-muted">{notice}</p> : null}
+        {notice ? (
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-meta text-ambient-muted">{notice}</p>
+            {needsSpotifyReconnect ? (
+              <Button type="button" variant="accent" onClick={() => void reconnectSpotify()} className="w-full sm:w-auto">
+                Reconnect Spotify
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {mix ? (
@@ -291,6 +328,14 @@ function removeSetValue<T>(values: Set<T>, value: T): Set<T> {
   const nextValues = new Set(values);
   nextValues.delete(value);
   return nextValues;
+}
+
+function isReconnectPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  return "requiredScope" in payload || "requiredScopes" in payload;
 }
 
 async function fileToSpotifyCoverBase64(file: File): Promise<string> {
